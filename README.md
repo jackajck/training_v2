@@ -2,6 +2,20 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Environment Variables
+
+Create a `.env.local` file in the root directory with the following variables:
+
+```env
+DATABASE_URL=your_database_url
+APP_PASSWORD=your_password_here
+```
+
+- `DATABASE_URL`: PostgreSQL database connection string
+- `APP_PASSWORD`: Password to access the application (default: admin123)
+
+### Running the Development Server
+
 First, run the development server:
 
 ```bash
