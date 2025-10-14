@@ -26,7 +26,6 @@ export async function GET(request: Request) {
           OR p.position_id ILIKE ${'%' + query + '%'}
         GROUP BY p.position_id, p.position_name, p.is_active, p.created_at
         ORDER BY p.position_name ASC
-        LIMIT 100
       `;
     } else {
       // Return all positions (no limit)

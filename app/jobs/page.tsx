@@ -312,6 +312,21 @@ export default function PositionsPage() {
                   placeholder="Search courses to add..."
                   value={courseSearchQuery}
                   onChange={(e) => setCourseSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const filteredCourses = allCourses.filter(course =>
+                        courseSearchQuery.length < 2 ||
+                        course.course_name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+                        course.course_id.toLowerCase().includes(courseSearchQuery.toLowerCase())
+                      );
+                      const firstUnassigned = filteredCourses.find(course =>
+                        !courses.some(c => c.course_id === course.course_id)
+                      );
+                      if (firstUnassigned) {
+                        handleAddCourse(firstUnassigned.course_id, firstUnassigned.course_name);
+                      }
+                    }
+                  }}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
                 />
               </div>

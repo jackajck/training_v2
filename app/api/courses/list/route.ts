@@ -27,7 +27,6 @@ export async function GET(request: Request) {
           OR c.course_id ILIKE ${'%' + query + '%'}
         GROUP BY c.course_id, c.course_name, c.duration_months, c.is_active, c.created_at
         ORDER BY c.course_name ASC
-        LIMIT 200
       `;
     } else {
       // Return all courses
@@ -45,7 +44,6 @@ export async function GET(request: Request) {
         LEFT JOIN employee_training et ON c.course_id = et.course_id
         GROUP BY c.course_id, c.course_name, c.duration_months, c.is_active, c.created_at
         ORDER BY c.course_name ASC
-        LIMIT 200
       `;
     }
 

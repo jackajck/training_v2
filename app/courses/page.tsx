@@ -56,7 +56,7 @@ export default function CoursesPage() {
     try {
       const url = query
         ? `/api/courses/list?q=${encodeURIComponent(query)}`
-        : '/api/courses/list?limit=100';
+        : '/api/courses/list';
       const res = await fetch(url);
       const data = await res.json();
       setCourses(data.data || []);

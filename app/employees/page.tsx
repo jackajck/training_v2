@@ -661,6 +661,13 @@ export default function EmployeesPage() {
               placeholder="Search positions..."
               value={positionSearchQuery}
               onChange={(e) => setPositionSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && filteredPositions.length > 0) {
+                  // If Enter is pressed with results, select the first one
+                  const firstPosition = filteredPositions[0];
+                  handleAddPosition(firstPosition.position_id, firstPosition.position_name);
+                }
+              }}
               className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
             />
           </div>
@@ -712,6 +719,23 @@ export default function EmployeesPage() {
                   placeholder="Search courses..."
                   value={courseSearchQuery}
                   onChange={(e) => setCourseSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && filteredCourses.length > 0) {
+                      // If Enter is pressed with results, select the first one
+                      const firstCourse = filteredCourses[0];
+                      setSelectedCourse(firstCourse);
+                      const duration = firstCourse.duration_months || 0;
+                      const expirationDate = duration > 0
+                        ? calculateExpirationDate(addTrainingForm.completion_date, duration)
+                        : '';
+                      setAddTrainingForm({
+                        ...addTrainingForm,
+                        course_id: firstCourse.course_id,
+                        duration_months: duration,
+                        expiration_date: expirationDate
+                      });
+                    }
+                  }}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
                 />
               </>
