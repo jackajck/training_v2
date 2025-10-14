@@ -412,7 +412,7 @@ export default function EmployeesPage() {
                       const uniqueJobCodes = [...new Set(positions.map(p => p.job_code).filter(Boolean))];
                       return uniqueJobCodes.length > 0 && (
                         <p className="text-gray-400 text-xs">
-                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}: {uniqueJobCodes.join(', ')}
+                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}: {uniqueJobCodes.map(() => '*******').join(', ')}
                         </p>
                       );
                     })()}
