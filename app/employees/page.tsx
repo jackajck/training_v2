@@ -805,18 +805,44 @@ export default function EmployeesPage() {
                         </button>
                       ))}
                     </div>
+                    <button
+                      onClick={() => {
+                        setAddTrainingForm({
+                          ...addTrainingForm,
+                          duration_months: 0,
+                          expiration_date: ''
+                        });
+                      }}
+                      className={`w-full px-2 py-1 rounded text-xs font-semibold transition-colors ${
+                        addTrainingForm.duration_months === 0 && addTrainingForm.expiration_date === ''
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      No Expiration
+                    </button>
                   </div>
 
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Expiration Date</label>
-                    <input
-                      type="date"
-                      value={addTrainingForm.expiration_date}
-                      onChange={(e) => setAddTrainingForm({ ...addTrainingForm, expiration_date: e.target.value, duration_months: 0 })}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-gray-500"
-                      placeholder="Or set manually"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Select duration or enter manually</p>
+                    {addTrainingForm.duration_months === 0 && addTrainingForm.expiration_date === '' ? (
+                      <div className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-blue-400 text-sm flex items-center">
+                        <span>No expiration - One-time completion</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="date"
+                        value={addTrainingForm.expiration_date}
+                        onChange={(e) => setAddTrainingForm({ ...addTrainingForm, expiration_date: e.target.value, duration_months: 0 })}
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-gray-500"
+                        placeholder="Or set manually"
+                      />
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      {addTrainingForm.duration_months === 0 && addTrainingForm.expiration_date === ''
+                        ? 'This training will be marked as completed with no expiration'
+                        : 'Select duration, enter manually, or choose "No Expiration"'}
+                    </p>
                   </div>
 
                   <button
