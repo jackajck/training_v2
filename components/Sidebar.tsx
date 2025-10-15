@@ -178,7 +178,7 @@ export default function Sidebar() {
         <p className="text-xs text-yellow-200 leading-relaxed">
           <span className="font-semibold">This application is in Beta.</span> I
           am working on it, and you might encounter errors or irregularities.
-          Please contact me with questions. @JB3
+          Please contact me with questions. @JB3 (jr)
         </p>
       </div>
     </div>
