@@ -240,118 +240,110 @@ export default function PositionsPage() {
         {/* MIDDLE/RIGHT COLUMNS - Position Details */}
         {selectedPosition ? (
           <>
-            {/* MIDDLE COLUMN - Position Info & Required Courses */}
-            <div className="col-span-4 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
-              {/* Position Info Header */}
-              <div className="p-4 border-b border-gray-700 bg-gray-900">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-xl font-bold">{selectedPosition.position_name}</h2>
-                    <p className="text-gray-400 text-xs">ID: {selectedPosition.position_id}</p>
-                    {selectedPosition.description && (
-                      <p className="text-xs text-gray-500 mt-2">{selectedPosition.description}</p>
+            {/* MIDDLE COLUMN - Manage Required Courses (Split: Top = Details + Assigned, Bottom = Search + Add) */}
+            <div className="col-span-5 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
+              {/* UPPER SECTION - Position Info & Assigned Courses */}
+              <div className="flex flex-col max-h-[50%] border-b-2 border-gray-600">
+                {/* Position Info Header */}
+                <div className="p-4 border-b border-gray-700 bg-gray-900">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-xl font-bold">{selectedPosition.position_name}</h2>
+                      <p className="text-gray-400 text-xs">ID: {selectedPosition.position_id}</p>
+                      {selectedPosition.description && (
+                        <p className="text-xs text-gray-500 mt-2">{selectedPosition.description}</p>
+                      )}
+                    </div>
+                    {!selectedPosition.is_active && (
+                      <span className="px-2 py-1 bg-red-600 text-white text-xs rounded">Inactive</span>
                     )}
                   </div>
-                  {!selectedPosition.is_active && (
-                    <span className="px-2 py-1 bg-red-600 text-white text-xs rounded">Inactive</span>
+                </div>
+
+                {/* Assigned Courses Header */}
+                <div className="p-4 border-b border-gray-700">
+                  <h3 className="text-lg font-semibold">Required Courses ({courses.length})</h3>
+                </div>
+
+                {/* Assigned Courses as Tags */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  {loadingDetails ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    </div>
+                  ) : courses.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No required courses assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {courses.map((course) => (
+                        <div
+                          key={course.course_id}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-green-900/30 border border-green-700 rounded text-xs"
+                        >
+                          <span className="text-white font-medium">{course.course_name}</span>
+                          {!course.is_active && (
+                            <span className="px-1.5 py-0.5 bg-red-600 text-white text-[10px] rounded">Inactive</span>
+                          )}
+                          <button
+                            onClick={() => handleRemoveCourse(course.course_id, course.course_name)}
+                            className="text-gray-400 hover:text-gray-200 font-bold text-sm leading-none"
+                            title="Remove course"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Required Courses Header */}
-              <div className="p-4 border-b border-gray-700">
-                <h3 className="text-lg font-semibold">Required Courses ({courses.length})</h3>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6">
-                {loadingDetails ? (
-                  <div className="text-center py-8">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                  </div>
-                ) : courses.length === 0 ? (
-                  <p className="text-gray-500">No required courses</p>
-                ) : (
-                  <div className="space-y-2">
-                    {courses.map((course) => (
-                      <div
-                        key={course.course_id}
-                        className="px-3 py-2 bg-gray-900 rounded-lg flex justify-between items-center"
-                      >
-                        <div className="flex-1">
-                          <div className="text-sm text-gray-300">{course.course_name}</div>
-                          <div className="text-xs text-gray-500">ID: {course.course_id}</div>
-                          {course.duration_months && (
-                            <div className="text-xs text-gray-400">{course.duration_months} months</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {!course.is_active && (
-                            <span className="px-2 py-1 bg-red-600 text-white text-xs rounded">Inactive</span>
-                          )}
-                          <button
-                            onClick={() => handleRemoveCourse(course.course_id, course.course_name)}
-                            className="text-gray-400 hover:text-red-400 font-bold text-sm"
-                            title="Remove course"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN - Edit Courses (Add/Remove) */}
-            <div className="col-span-5 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
-              <div className="p-4 border-b border-gray-700">
-                <h3 className="text-lg font-semibold mb-3">Manage Required Courses</h3>
-                <input
-                  type="text"
-                  placeholder="Search courses to add..."
-                  value={courseSearchQuery}
-                  onChange={(e) => setCourseSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const filteredCourses = allCourses.filter(course =>
-                        courseSearchQuery.length < 2 ||
-                        course.course_name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
-                        course.course_id.toLowerCase().includes(courseSearchQuery.toLowerCase())
-                      );
-                      const firstUnassigned = filteredCourses.find(course =>
-                        !courses.some(c => c.course_id === course.course_id)
-                      );
-                      if (firstUnassigned) {
-                        handleAddCourse(firstUnassigned.course_id, firstUnassigned.course_name);
+              {/* LOWER SECTION - Search & Add Courses */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Search Header */}
+                <div className="p-4 border-b border-gray-700">
+                  <h3 className="text-lg font-semibold mb-3">Add Courses</h3>
+                  <input
+                    type="text"
+                    placeholder="Search courses to add..."
+                    value={courseSearchQuery}
+                    onChange={(e) => setCourseSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const filteredCourses = allCourses.filter(course =>
+                          !courses.some(c => c.course_id === course.course_id) &&
+                          (courseSearchQuery.length < 2 ||
+                          course.course_name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+                          course.course_id.toLowerCase().includes(courseSearchQuery.toLowerCase()))
+                        );
+                        if (filteredCourses.length > 0) {
+                          handleAddCourse(filteredCourses[0].course_id, filteredCourses[0].course_name);
+                        }
                       }
-                    }
-                  }}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
-                />
-              </div>
+                    }}
+                    className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
+                  />
+                </div>
 
-              <div className="flex-1 overflow-y-auto">
-                {loadingCourses ? (
-                  <div className="text-center py-8">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-700">
-                    {allCourses
-                      .filter(course =>
-                        courseSearchQuery.length < 2 ||
-                        course.course_name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
-                        course.course_id.toLowerCase().includes(courseSearchQuery.toLowerCase())
-                      )
-                      .map((course) => {
-                        const isAssigned = courses.some(c => c.course_id === course.course_id);
-                        return (
+                {/* Available Courses List */}
+                <div className="flex-1 overflow-y-auto">
+                  {loadingCourses ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-700">
+                      {allCourses
+                        .filter(course =>
+                          !courses.some(c => c.course_id === course.course_id) &&
+                          (courseSearchQuery.length < 2 ||
+                          course.course_name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+                          course.course_id.toLowerCase().includes(courseSearchQuery.toLowerCase()))
+                        )
+                        .map((course) => (
                           <div
                             key={course.course_id}
-                            className={`px-4 py-3 transition-colors ${
-                              isAssigned ? 'bg-green-900/20' : 'hover:bg-gray-700'
-                            }`}
+                            className="px-4 py-3 hover:bg-gray-700 transition-colors"
                           >
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
@@ -364,27 +356,65 @@ export default function PositionsPage() {
                                   <span className="inline-block mt-1 px-2 py-0.5 bg-red-600 text-white text-xs rounded">Inactive</span>
                                 )}
                               </div>
-                              <div>
-                                {isAssigned ? (
-                                  <button
-                                    onClick={() => handleRemoveCourse(course.course_id, course.course_name)}
-                                    className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-500 transition-colors text-xs font-semibold"
-                                  >
-                                    Remove
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleAddCourse(course.course_id, course.course_name)}
-                                    className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-500 transition-colors text-xs font-semibold"
-                                  >
-                                    Add
-                                  </button>
-                                )}
-                              </div>
+                              <button
+                                onClick={() => handleAddCourse(course.course_id, course.course_name)}
+                                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-500 transition-colors text-xs font-semibold"
+                              >
+                                Add
+                              </button>
                             </div>
                           </div>
-                        );
-                      })}
+                        ))}
+                      {allCourses.filter(course =>
+                        !courses.some(c => c.course_id === course.course_id) &&
+                        (courseSearchQuery.length < 2 ||
+                        course.course_name.toLowerCase().includes(courseSearchQuery.toLowerCase()) ||
+                        course.course_id.toLowerCase().includes(courseSearchQuery.toLowerCase()))
+                      ).length === 0 && (
+                        <div className="p-8 text-center text-gray-500 text-sm">
+                          {courseSearchQuery.length >= 2 ? 'No matching courses found' : 'All courses assigned'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN - Employees in Position */}
+            <div className="col-span-4 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
+              <div className="p-4 border-b border-gray-700">
+                <h3 className="text-lg font-semibold">Employees in Position ({employees.length})</h3>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                {loadingDetails ? (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                  </div>
+                ) : employees.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500 text-sm">
+                    No employees found with this position
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-700">
+                    {employees.map((employee) => (
+                      <div
+                        key={employee.employee_id}
+                        className="px-4 py-3 hover:bg-gray-700 transition-colors"
+                      >
+                        <div className="font-medium text-white text-sm">{employee.employee_name}</div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Badge: {employee.badge_id}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Job Code: {employee.job_code}
+                        </div>
+                        {!employee.is_active && (
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-red-600 text-white text-xs rounded">Inactive</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -393,13 +423,13 @@ export default function PositionsPage() {
         ) : (
           <>
             {/* MIDDLE COLUMN - Placeholder */}
-            <div className="col-span-4 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
-              <p className="text-gray-500">Select a position to view details</p>
+            <div className="col-span-5 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
+              <p className="text-gray-500">Select a position to manage required courses</p>
             </div>
 
             {/* RIGHT COLUMN - Placeholder */}
-            <div className="col-span-5 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
-              <p className="text-gray-500">Select a position to manage required courses</p>
+            <div className="col-span-4 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
+              <p className="text-gray-500">Select a position to view employees</p>
             </div>
           </>
         )}
