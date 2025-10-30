@@ -165,6 +165,7 @@ export default function Sidebar() {
     { type: "divider" },
     { href: "/org-tree", label: "ORG Tree", icon: <OrgTreeIcon /> },
     { href: "/raw-user", label: "RAW user", icon: <DatabaseIcon /> },
+    { href: "/employee-view", label: "Employee View", icon: <UserIcon /> },
     { type: "divider" },
     { href: "/needs-attention", label: "Needs Attention", icon: <AlertIcon /> },
   ];
@@ -212,9 +213,7 @@ export default function Sidebar() {
       {/* Beta Notice */}
       <div className="p-4 m-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
         <p className="text-xs text-yellow-200 leading-relaxed">
-          <span className="font-semibold">This application is in Beta.</span> I
-          am working on it, and you might encounter errors or irregularities.
-          Please contact me with questions. @JB3 (jr)
+          This application is in Beta, contact jb3
         </p>
       </div>
     </div>

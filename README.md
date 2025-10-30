@@ -9,10 +9,12 @@ Create a `.env.local` file in the root directory with the following variables:
 ```env
 DATABASE_URL=your_database_url
 APP_PASSWORD=your_password_here
+EMPLOYEE_PASSWORD=your_employee_password_here
 ```
 
 - `DATABASE_URL`: PostgreSQL database connection string
-- `APP_PASSWORD`: Password to access the application (default: admin123)
+- `APP_PASSWORD`: Password for admin access with full management capabilities (default: admin123)
+- `EMPLOYEE_PASSWORD`: Password for employee view access - read-only access to employee records (default: employee123)
 
 ### Running the Development Server
 
