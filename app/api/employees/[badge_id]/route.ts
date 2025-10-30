@@ -29,7 +29,7 @@ export async function GET(
 
     const employee_id = employee[0].employee_id;
 
-    // Get all positions for this employee
+    // Get all active positions for this employee
     const positions = await sql`
       SELECT
         p.position_id,
@@ -39,6 +39,7 @@ export async function GET(
       FROM employee_positions ep
       JOIN positions p ON ep.position_id = p.position_id
       WHERE ep.employee_id = ${employee_id}
+        AND p.is_active = true
       ORDER BY p.position_name ASC
     `;
 
@@ -64,6 +65,7 @@ export async function GET(
         et.completion_date,
         et.expiration_date,
         et.training_id,
+        et.notes,
         CASE
             WHEN et.training_id IS NULL THEN 'Never Completed'
             WHEN et.expiration_date IS NULL THEN 'Completed (No Expiration)'
@@ -72,7 +74,7 @@ export async function GET(
         END as status
       FROM course_requirements cr
       LEFT JOIN LATERAL (
-          SELECT employee_id, course_id, completion_date, expiration_date, training_id
+          SELECT employee_id, course_id, completion_date, expiration_date, training_id, notes
           FROM employee_training et2
           WHERE et2.employee_id = ${employee_id}
             AND et2.course_id = cr.course_id

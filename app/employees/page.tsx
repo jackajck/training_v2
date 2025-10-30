@@ -33,6 +33,7 @@ interface TrainingRecord {
   completion_date: string | null;
   expiration_date: string | null;
   status: string;
+  notes: string | null;
 }
 
 interface Course {
@@ -50,6 +51,7 @@ export default function EmployeesPage() {
   const [trainingRecords, setTrainingRecords] = useState<TrainingRecord[]>([]);
   const [searching, setSearching] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [expandedTrainingRow, setExpandedTrainingRow] = useState<number | null>(null);
 
   // Add position modal state
   const [showAddPositionModal, setShowAddPositionModal] = useState(false);
@@ -66,7 +68,8 @@ export default function EmployeesPage() {
     course_id: '',
     completion_date: '',
     expiration_date: '',
-    duration_months: 0
+    duration_months: 0,
+    notes: ''
   });
   const [addingTraining, setAddingTraining] = useState(false);
 
@@ -105,6 +108,7 @@ export default function EmployeesPage() {
   const handleSelectEmployee = async (employee: Employee) => {
     setSelectedEmployee(employee);
     setLoadingDetails(true);
+    setExpandedTrainingRow(null); // Reset expanded row when changing employees
 
     try {
       const res = await fetch(`/api/employees/${employee.badge_id}`);
@@ -172,9 +176,9 @@ export default function EmployeesPage() {
     setShowAddPositionModal(true);
     setPositionSearchQuery('');
 
-    // Fetch all positions
+    // Fetch only active positions
     try {
-      const res = await fetch('/api/positions/list');
+      const res = await fetch('/api/positions/list?active_only=true');
       const data = await res.json();
       setAllPositions(data.data || []);
     } catch (error) {
@@ -227,7 +231,8 @@ export default function EmployeesPage() {
       course_id: '',
       completion_date: new Date().toISOString().split('T')[0],
       expiration_date: '',
-      duration_months: 0
+      duration_months: 0,
+      notes: ''
     });
 
     // Fetch all courses
@@ -272,7 +277,8 @@ export default function EmployeesPage() {
           employee_id: selectedEmployee.employee_id,
           course_id: addTrainingForm.course_id,
           completion_date: addTrainingForm.completion_date,
-          expiration_date: addTrainingForm.expiration_date || null
+          expiration_date: addTrainingForm.expiration_date || null,
+          notes: addTrainingForm.notes || null
         })
       });
 
@@ -350,7 +356,7 @@ export default function EmployeesPage() {
       <div className="grid grid-cols-12 gap-6 h-full overflow-hidden">
 
         {/* LEFT COLUMN - Search/Employee List */}
-        <div className="col-span-3 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
+        <div className="col-span-2 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
           <div className="p-4 border-b border-gray-700">
             <input
               type="text"
@@ -412,7 +418,7 @@ export default function EmployeesPage() {
                       const uniqueJobCodes = [...new Set(positions.map(p => p.job_code).filter(Boolean))];
                       return uniqueJobCodes.length > 0 && (
                         <p className="text-gray-400 text-xs">
-                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}: {uniqueJobCodes.map(() => '*******').join(', ')}
+                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}: {uniqueJobCodes.join(', ')}
                         </p>
                       );
                     })()}
@@ -545,7 +551,7 @@ export default function EmployeesPage() {
             </div>
 
             {/* RIGHT COLUMN - Training Records */}
-            <div className="col-span-5 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
+            <div className="col-span-6 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
               <div className="p-4 border-b border-gray-700">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-semibold">Training Requirements</h3>
@@ -589,37 +595,75 @@ export default function EmployeesPage() {
                         <th className="px-3 py-2 text-left font-medium text-gray-400 uppercase">Status</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-400 uppercase">Course</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-400 uppercase">Position</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-400 uppercase">Completed</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-400 uppercase">Expires</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-700">
                       {trainingRecords.map((record, idx) => (
-                        <tr key={idx} className="hover:bg-gray-700 transition-colors">
-                          <td className="px-3 py-2">
-                            <span className={`px-2 py-1 ${getStatusColor(record.status)} text-white rounded text-xs font-semibold`}>
-                              {record.status === 'Never Completed' ? 'Missing' : record.status}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-gray-300">
-                            <div className="font-medium">{record.course_name}</div>
-                            <div className="text-gray-500">ID: {record.required_course_id}</div>
-                          </td>
-                          <td className="px-3 py-2 text-gray-400">{record.position_name}</td>
-                          <td className="px-3 py-2 text-gray-300">
-                            {record.expiration_date ? (
-                              <div>
-                                <div>{new Date(record.expiration_date).toLocaleDateString()}</div>
-                                <div className="text-xs text-yellow-400">
-                                  {formatDistanceToNow(new Date(record.expiration_date), { addSuffix: true })}
-                                </div>
+                        <>
+                          <tr
+                            key={idx}
+                            onClick={() => setExpandedTrainingRow(expandedTrainingRow === idx ? null : idx)}
+                            className="hover:bg-gray-700 transition-colors cursor-pointer"
+                          >
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <svg
+                                  className={`w-4 h-4 text-gray-400 transition-transform ${expandedTrainingRow === idx ? 'rotate-90' : ''}`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span className={`px-2 py-1 ${getStatusColor(record.status)} text-white rounded text-xs font-semibold`}>
+                                  {record.status === 'Never Completed' ? 'Missing' : record.status}
+                                </span>
                               </div>
-                            ) : record.completion_date ? (
-                              <span className="text-gray-500">No expiration</span>
-                            ) : (
-                              <span className="text-gray-500">-</span>
-                            )}
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="px-3 py-2 text-gray-300">
+                              <div className="font-medium">{record.course_name}</div>
+                              <div className="text-gray-500">ID: {record.required_course_id}</div>
+                            </td>
+                            <td className="px-3 py-2 text-gray-400">{record.position_name}</td>
+                            <td className="px-3 py-2 text-gray-300">
+                              {record.completion_date ? (
+                                <div>{new Date(record.completion_date).toLocaleDateString()}</div>
+                              ) : (
+                                <span className="text-gray-500">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-gray-300">
+                              {record.expiration_date ? (
+                                <div>
+                                  <div>{new Date(record.expiration_date).toLocaleDateString()}</div>
+                                  <div className="text-xs text-yellow-400">
+                                    {formatDistanceToNow(new Date(record.expiration_date), { addSuffix: true })}
+                                  </div>
+                                </div>
+                              ) : record.completion_date ? (
+                                <span className="text-gray-500">No expiration</span>
+                              ) : (
+                                <span className="text-gray-500">-</span>
+                              )}
+                            </td>
+                          </tr>
+                          {expandedTrainingRow === idx && (
+                            <tr key={`${idx}-expanded`} className="bg-gray-900">
+                              <td colSpan={5} className="px-3 py-3">
+                                <div className="pl-8">
+                                  <div className="text-xs font-semibold text-gray-400 mb-1">Notes:</div>
+                                  {record.notes ? (
+                                    <div className="text-sm text-gray-300 whitespace-pre-wrap">{record.notes}</div>
+                                  ) : (
+                                    <div className="text-sm text-gray-500 italic">No notes recorded</div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       ))}
                     </tbody>
                   </table>
@@ -635,7 +679,7 @@ export default function EmployeesPage() {
             </div>
 
             {/* RIGHT COLUMN - Placeholder */}
-            <div className="col-span-5 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
+            <div className="col-span-6 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center">
               <p className="text-gray-500">Training requirements will appear here</p>
             </div>
           </>
@@ -843,6 +887,18 @@ export default function EmployeesPage() {
                         ? 'This training will be marked as completed with no expiration'
                         : 'Select duration, enter manually, or choose "No Expiration"'}
                     </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Notes (Optional)</label>
+                    <textarea
+                      value={addTrainingForm.notes}
+                      onChange={(e) => setAddTrainingForm({ ...addTrainingForm, notes: e.target.value })}
+                      placeholder="Add any comments or notes about this training..."
+                      rows={3}
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-gray-500 resize-none"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Optional comments about this training record</p>
                   </div>
 
                   <button

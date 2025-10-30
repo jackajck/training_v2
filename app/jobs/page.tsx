@@ -254,9 +254,56 @@ export default function PositionsPage() {
                         <p className="text-xs text-gray-500 mt-2">{selectedPosition.description}</p>
                       )}
                     </div>
-                    {!selectedPosition.is_active && (
-                      <span className="px-2 py-1 bg-red-600 text-white text-xs rounded">Inactive</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          const newStatus = !selectedPosition.is_active;
+                          if (!confirm(`${newStatus ? 'Activate' : 'Deactivate'} ${selectedPosition.position_name}?\n\n${newStatus ? 'This will make this position active and requirements will be calculated for employees with this position.' : 'This will make this position inactive. Training requirements from this position will be ignored for all employees.'}`)) {
+                            return;
+                          }
+
+                          try {
+                            const res = await fetch('/api/positions/toggle-active', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                position_id: selectedPosition.position_id,
+                                is_active: newStatus
+                              })
+                            });
+
+                            const data = await res.json();
+
+                            if (!res.ok) {
+                              alert(data.error || 'Failed to toggle position status');
+                              return;
+                            }
+
+                            alert(`Position ${newStatus ? 'activated' : 'deactivated'} successfully!`);
+                            // Update local state
+                            setSelectedPosition({ ...selectedPosition, is_active: newStatus });
+                            // Refresh position list
+                            fetchPositions(searchQuery);
+                          } catch (error) {
+                            console.error('Error toggling position status:', error);
+                            alert('Failed to toggle position status');
+                          }
+                        }}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          selectedPosition.is_active ? 'bg-gray-600' : 'bg-red-600'
+                        }`}
+                        title={selectedPosition.is_active ? 'Active - Click to deactivate' : 'Inactive - Click to activate'}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            selectedPosition.is_active ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-xs font-semibold ${selectedPosition.is_active ? 'text-green-400' : 'text-gray-400'}`}>
+                        {selectedPosition.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 

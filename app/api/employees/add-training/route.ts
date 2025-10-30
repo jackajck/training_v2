@@ -4,7 +4,7 @@ import { sql } from '@/lib/db';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { employee_id, course_id, completion_date, expiration_date } = body;
+    const { employee_id, course_id, completion_date, expiration_date, notes } = body;
 
     // Validate input
     if (!employee_id || !course_id || !completion_date) {
@@ -40,12 +40,13 @@ export async function POST(request: Request) {
 
     // Insert training record (ON CONFLICT DO NOTHING prevents duplicates)
     await sql`
-      INSERT INTO employee_training (employee_id, course_id, completion_date, expiration_date)
+      INSERT INTO employee_training (employee_id, course_id, completion_date, expiration_date, notes)
       VALUES (
         ${employee_id},
         ${course_id},
         ${completion_date},
-        ${expiration_date || null}
+        ${expiration_date || null},
+        ${notes || null}
       )
       ON CONFLICT (employee_id, course_id, completion_date) DO NOTHING
     `;
