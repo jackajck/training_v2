@@ -26,7 +26,6 @@ export async function POST(request: Request) {
     `;
 
     // Generate next ID in 555*** sequence (555000-555999)
-    let nextId: string;
     let startId: number;
 
     if (maxIdResult.length === 0) {
@@ -38,11 +37,11 @@ export async function POST(request: Request) {
     }
 
     // Keep incrementing until we find an available ID
-    let found = false;
+    let nextId: string | null = null;
     let attempts = 0;
     const maxAttempts = 1000; // Safety limit
 
-    while (!found && attempts < maxAttempts) {
+    while (nextId === null && attempts < maxAttempts) {
       const checkId = (startId + attempts).toString();
 
       // Make sure we stay within 555000-555999 range
@@ -59,13 +58,12 @@ export async function POST(request: Request) {
 
       if (existingPosition.length === 0) {
         nextId = checkId;
-        found = true;
       } else {
         attempts++;
       }
     }
 
-    if (!found) {
+    if (nextId === null) {
       return NextResponse.json(
         { error: 'Unable to generate unique position ID' },
         { status: 500 }

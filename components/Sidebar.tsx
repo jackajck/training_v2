@@ -100,6 +100,7 @@ const AlertIcon = () => (
   </svg>
 );
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ChartIcon = () => (
   <svg
     className="w-5 h-5"
