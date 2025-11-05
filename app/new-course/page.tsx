@@ -60,7 +60,7 @@ export default function NewCoursePage() {
   return (
     <div className="h-[calc(100vh-80px)] flex flex-col">
       <h1 className="text-3xl font-bold mb-2">New Course</h1>
-      <p className="text-gray-400 mb-6">Create a new course with auto-generated ID (999**)</p>
+      <p className="text-gray-400 mb-6">Create a new course with auto-generated ID (999***)</p>
 
       <div className="max-w-2xl">
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
@@ -68,7 +68,7 @@ export default function NewCoursePage() {
             {/* Info Box */}
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
               <p className="text-sm text-blue-300">
-                <strong>Note:</strong> The course ID will be automatically generated starting from 99900 to avoid conflicts with legacy course IDs.
+                <strong>Note:</strong> The course ID will be automatically generated in the 999000-999999 range to avoid conflicts with legacy course IDs.
               </p>
             </div>
 

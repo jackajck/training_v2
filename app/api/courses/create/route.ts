@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
-// POST - Create new course with auto-generated 999** ID
+// POST - Create new course with auto-generated 999*** ID (999000-999999)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -15,24 +15,61 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get the highest existing 999** course ID
+    // Get the highest existing 999*** course ID (6-digit IDs starting with 999)
     const maxIdResult = await sql`
       SELECT course_id
       FROM courses
-      WHERE course_id LIKE '999%'
+      WHERE course_id LIKE '999___'
+      AND LENGTH(course_id) = 6
       ORDER BY course_id DESC
       LIMIT 1
     `;
 
-    // Generate next ID in 999** sequence
+    // Generate next ID in 999*** sequence (999000-999999)
     let nextId: string;
+    let startId: number;
+
     if (maxIdResult.length === 0) {
-      // No 999** IDs exist yet, start at 99900
-      nextId = '99900';
+      // No 999*** IDs exist yet, start at 999000
+      startId = 999000;
     } else {
       const currentMax = maxIdResult[0].course_id;
-      const numericPart = parseInt(currentMax);
-      nextId = (numericPart + 1).toString();
+      startId = parseInt(currentMax) + 1;
+    }
+
+    // Keep incrementing until we find an available ID
+    let found = false;
+    let attempts = 0;
+    const maxAttempts = 1000; // Safety limit
+
+    while (!found && attempts < maxAttempts) {
+      const checkId = (startId + attempts).toString();
+
+      // Make sure we stay within 999000-999999 range
+      if (parseInt(checkId) > 999999) {
+        return NextResponse.json(
+          { error: 'Course ID range exhausted (999000-999999)' },
+          { status: 500 }
+        );
+      }
+
+      const existingCourse = await sql`
+        SELECT course_id FROM courses WHERE course_id = ${checkId}
+      `;
+
+      if (existingCourse.length === 0) {
+        nextId = checkId;
+        found = true;
+      } else {
+        attempts++;
+      }
+    }
+
+    if (!found) {
+      return NextResponse.json(
+        { error: 'Unable to generate unique course ID' },
+        { status: 500 }
+      );
     }
 
     // Insert new course
