@@ -250,9 +250,6 @@ export default function PositionsPage() {
                     <div>
                       <h2 className="text-xl font-bold">{selectedPosition.position_name}</h2>
                       <p className="text-gray-400 text-xs">ID: {selectedPosition.position_id}</p>
-                      {selectedPosition.description && (
-                        <p className="text-xs text-gray-500 mt-2">{selectedPosition.description}</p>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
