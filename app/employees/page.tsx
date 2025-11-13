@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface Employee {
@@ -10,6 +10,8 @@ interface Employee {
   positions: string;
   position_ids: string;
   is_active: boolean;
+  leader?: string | null;
+  role?: string | null;
 }
 
 interface Position {
@@ -76,8 +78,19 @@ export default function EmployeesPage() {
   // Position courses state
   const [positionCourses, setPositionCourses] = useState<{ [key: string]: Course[] }>({});
 
+  // Managers state
+  const [managers, setManagers] = useState<string[]>([]);
+  const [currentLeader, setCurrentLeader] = useState<string>('');
+  const [updatingLeader, setUpdatingLeader] = useState(false);
+
+  // Role editing state
+  const [isEditingRole, setIsEditingRole] = useState(false);
+  const [editedRole, setEditedRole] = useState<string>('');
+  const [updatingRole, setUpdatingRole] = useState(false);
+
   useEffect(() => {
     fetchEmployees();
+    fetchManagers();
   }, []);
 
   const fetchEmployees = async (query = '') => {
@@ -85,7 +98,7 @@ export default function EmployeesPage() {
     try {
       const url = query
         ? `/api/employees/search?q=${encodeURIComponent(query)}`
-        : '/api/employees/search?limit=100';
+        : '/api/employees/all';
       const res = await fetch(url);
       const data = await res.json();
       setSearchResults(data.data || []);
@@ -95,6 +108,85 @@ export default function EmployeesPage() {
     } finally {
       setSearching(false);
     }
+  };
+
+  const fetchManagers = async () => {
+    try {
+      const res = await fetch('/api/managers/list');
+      const data = await res.json();
+      setManagers(data.managers || []);
+    } catch (error) {
+      console.error('Error fetching managers:', error);
+      setManagers([]);
+    }
+  };
+
+  const updateLeader = async (newLeader: string) => {
+    if (!selectedEmployee) return;
+
+    setUpdatingLeader(true);
+    try {
+      const res = await fetch(`/api/employees/${selectedEmployee.badge_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leader: newLeader })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to update leader');
+        return;
+      }
+
+      setCurrentLeader(newLeader);
+      // Update the selected employee object
+      setSelectedEmployee({ ...selectedEmployee, leader: newLeader });
+    } catch (error) {
+      console.error('Error updating leader:', error);
+      alert('Failed to update leader');
+    } finally {
+      setUpdatingLeader(false);
+    }
+  };
+
+  const updateRole = async () => {
+    if (!selectedEmployee) return;
+
+    setUpdatingRole(true);
+    try {
+      const res = await fetch(`/api/employees/${selectedEmployee.badge_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: editedRole })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to update role');
+        return;
+      }
+
+      // Update the selected employee object
+      setSelectedEmployee({ ...selectedEmployee, role: editedRole });
+      setIsEditingRole(false);
+    } catch (error) {
+      console.error('Error updating role:', error);
+      alert('Failed to update role');
+    } finally {
+      setUpdatingRole(false);
+    }
+  };
+
+  const startEditingRole = () => {
+    setEditedRole(selectedEmployee?.role || '');
+    setIsEditingRole(true);
+  };
+
+  const cancelEditingRole = () => {
+    setIsEditingRole(false);
+    setEditedRole('');
   };
 
   const handleSearch = async () => {
@@ -116,6 +208,7 @@ export default function EmployeesPage() {
       const employeePositions = data.positions || [];
       setPositions(employeePositions);
       setTrainingRecords(data.training || []);
+      setCurrentLeader(data.employee?.leader || '');
 
       // Fetch courses for all positions
       const coursesPromises = employeePositions.map((pos: Position) =>
@@ -407,21 +500,12 @@ export default function EmployeesPage() {
             {/* MIDDLE COLUMN - Employee Info & Positions */}
             <div className="col-span-4 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
               {/* Employee Info Header */}
-              <div className="p-4 border-b border-gray-700 bg-gray-900">
-                <div className="flex justify-between items-start">
+              <div className="p-6 border-b border-gray-700 bg-gray-900">
+                {/* Header Row with Name and Status */}
+                <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h2 className="text-xl font-bold">{selectedEmployee.employee_name}</h2>
-                    <p className="text-gray-400 text-xs">Badge: {selectedEmployee.badge_id}</p>
-
-                    {/* Job Codes */}
-                    {positions.length > 0 && (() => {
-                      const uniqueJobCodes = [...new Set(positions.map(p => p.job_code).filter(Boolean))];
-                      return uniqueJobCodes.length > 0 && (
-                        <p className="text-gray-400 text-xs">
-                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}: {uniqueJobCodes.join(', ')}
-                        </p>
-                      );
-                    })()}
+                    <h2 className="text-2xl font-bold text-white">{selectedEmployee.employee_name}</h2>
+                    <p className="text-gray-400 text-sm mt-0.5">Badge ID: {selectedEmployee.badge_id}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -449,9 +533,7 @@ export default function EmployeesPage() {
                           }
 
                           alert(`Employee ${newStatus ? 'activated' : 'deactivated'} successfully!`);
-                          // Update local state
                           setSelectedEmployee({ ...selectedEmployee, is_active: newStatus });
-                          // Refresh employee list
                           fetchEmployees(searchQuery);
                         } catch (error) {
                           console.error('Error toggling employee status:', error);
@@ -469,9 +551,104 @@ export default function EmployeesPage() {
                         }`}
                       />
                     </button>
-                    <span className={`text-xs font-semibold ${selectedEmployee.is_active ? 'text-green-400' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-semibold ${selectedEmployee.is_active ? 'text-green-400' : 'text-red-400'}`}>
                       {selectedEmployee.is_active ? 'Active' : 'Inactive'}
                     </span>
+                  </div>
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Role Field */}
+                  <div className="bg-gray-800 rounded-lg p-3 col-span-2">
+                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Role</label>
+                    {isEditingRole ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editedRole}
+                          onChange={(e) => setEditedRole(e.target.value)}
+                          placeholder="Enter role..."
+                          disabled={updatingRole}
+                          className="flex-1 bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') updateRole();
+                            if (e.key === 'Escape') cancelEditingRole();
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={updateRole}
+                          disabled={updatingRole}
+                          className="text-green-400 hover:text-green-300 disabled:opacity-50"
+                          title="Save"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={cancelEditingRole}
+                          disabled={updatingRole}
+                          className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                          title="Cancel"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between group">
+                        <span className="text-sm text-white">{selectedEmployee.role || 'Not assigned'}</span>
+                        <button
+                          onClick={startEditingRole}
+                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-200 transition-all"
+                          title="Edit role"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Job Codes */}
+                  {positions.length > 0 && (() => {
+                    const uniqueJobCodes = [...new Set(positions.map(p => p.job_code).filter(Boolean))];
+                    return uniqueJobCodes.length > 0 && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {uniqueJobCodes.map((code) => (
+                            <span key={code} className="px-2 py-1 bg-gray-700 text-white text-sm rounded">
+                              {code}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Leader Field */}
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Leader</label>
+                    <select
+                      value={currentLeader}
+                      onChange={(e) => updateLeader(e.target.value)}
+                      disabled={updatingLeader}
+                      className="w-full bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                    >
+                      <option value="">-- Select Leader --</option>
+                      {managers.map((manager) => (
+                        <option key={manager} value={manager}>
+                          {manager}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -601,9 +778,8 @@ export default function EmployeesPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-700">
                       {trainingRecords.map((record, idx) => (
-                        <>
+                        <React.Fragment key={idx}>
                           <tr
-                            key={idx}
                             onClick={() => setExpandedTrainingRow(expandedTrainingRow === idx ? null : idx)}
                             className="hover:bg-gray-700 transition-colors cursor-pointer"
                           >
@@ -650,7 +826,7 @@ export default function EmployeesPage() {
                             </td>
                           </tr>
                           {expandedTrainingRow === idx && (
-                            <tr key={`${idx}-expanded`} className="bg-gray-900">
+                            <tr className="bg-gray-900">
                               <td colSpan={5} className="px-3 py-3">
                                 <div className="pl-8">
                                   <div className="text-xs font-semibold text-gray-400 mb-1">Notes:</div>
@@ -663,7 +839,7 @@ export default function EmployeesPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>

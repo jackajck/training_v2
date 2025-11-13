@@ -9,6 +9,8 @@ interface Employee {
   positions: string;
   position_ids: string;
   is_active: boolean;
+  leader?: string | null;
+  role?: string | null;
 }
 
 interface Position {
@@ -24,6 +26,8 @@ export default function NewEmployeePage() {
   const [badgeId, setBadgeId] = useState('');
   const [employeeName, setEmployeeName] = useState('');
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set());
+  const [leader, setLeader] = useState('');
+  const [role, setRole] = useState('');
 
   // Mirror feature state
   const [mirrorSearchQuery, setMirrorSearchQuery] = useState('');
@@ -36,11 +40,15 @@ export default function NewEmployeePage() {
   const [positionSearchQuery, setPositionSearchQuery] = useState('');
   const [loadingPositions, setLoadingPositions] = useState(false);
 
+  // Managers state
+  const [managers, setManagers] = useState<string[]>([]);
+
   // Submission state
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchPositions();
+    fetchManagers();
   }, []);
 
   const fetchPositions = async () => {
@@ -54,6 +62,17 @@ export default function NewEmployeePage() {
       console.error('Error fetching positions:', error);
     } finally {
       setLoadingPositions(false);
+    }
+  };
+
+  const fetchManagers = async () => {
+    try {
+      const res = await fetch('/api/managers/list');
+      const data = await res.json();
+      setManagers(data.managers || []);
+    } catch (error) {
+      console.error('Error fetching managers:', error);
+      setManagers([]);
     }
   };
 
@@ -92,12 +111,21 @@ export default function NewEmployeePage() {
     } else {
       console.log('No position_ids found for this employee');
     }
+
+    // Mirror the leader and role
+    if (employee.leader) {
+      setLeader(employee.leader);
+    }
+    if (employee.role) {
+      setRole(employee.role);
+    }
   };
 
   const handleClearMirror = () => {
     setSelectedMirrorEmployee(null);
     setMirrorSearchQuery('');
     setMirrorResults([]);
+    // Don't clear leader and role - user might want to keep those
   };
 
   const togglePosition = (position_id: string) => {
@@ -140,7 +168,9 @@ export default function NewEmployeePage() {
         body: JSON.stringify({
           badge_id: badgeId,
           employee_name: employeeName,
-          position_ids: Array.from(selectedPositions)
+          position_ids: Array.from(selectedPositions),
+          leader: leader || null,
+          role: role || null
         })
       });
 
@@ -156,6 +186,8 @@ export default function NewEmployeePage() {
       setBadgeId('');
       setEmployeeName('');
       setSelectedPositions(new Set());
+      setLeader('');
+      setRole('');
       setSelectedMirrorEmployee(null);
       setMirrorSearchQuery('');
       setMirrorResults([]);
@@ -218,7 +250,15 @@ export default function NewEmployeePage() {
                   Clear
                 </button>
               </div>
-              <p className="text-xs text-green-400">✓ {selectedPositions.size} positions copied</p>
+              <div className="space-y-1">
+                <p className="text-xs text-green-400">✓ {selectedPositions.size} positions copied</p>
+                {selectedMirrorEmployee.role && (
+                  <p className="text-xs text-green-400">✓ Role: {selectedMirrorEmployee.role}</p>
+                )}
+                {selectedMirrorEmployee.leader && (
+                  <p className="text-xs text-green-400">✓ Leader: {selectedMirrorEmployee.leader}</p>
+                )}
+              </div>
             </div>
           ) : null}
 
@@ -285,6 +325,39 @@ export default function NewEmployeePage() {
                   placeholder="Enter full name..."
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
                 />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Role
+                </label>
+                <input
+                  type="text"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="Enter role/job title..."
+                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
+                />
+              </div>
+
+              {/* Leader */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Leader
+                </label>
+                <select
+                  value={leader}
+                  onChange={(e) => setLeader(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
+                >
+                  <option value="">-- Select Leader --</option>
+                  {managers.map((manager) => (
+                    <option key={manager} value={manager}>
+                      {manager}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Selected Positions Summary */}

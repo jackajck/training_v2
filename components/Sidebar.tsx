@@ -84,7 +84,7 @@ const PlusIcon = () => (
   </svg>
 );
 
-const AlertIcon = () => (
+const CodeIcon = () => (
   <svg
     className="w-5 h-5"
     fill="none"
@@ -95,7 +95,7 @@ const AlertIcon = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth={2}
-      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
     />
   </svg>
 );
@@ -166,9 +166,9 @@ export default function Sidebar() {
     { type: "divider" },
     { href: "/org-tree", label: "ORG Tree", icon: <OrgTreeIcon /> },
     { href: "/raw-user", label: "RAW user", icon: <DatabaseIcon /> },
-    { href: "/employee-view", label: "Employee View", icon: <UserIcon /> },
+    { href: "/employee-view", label: "Employee View", icon: <UserIcon />, disabled: true },
     { type: "divider" },
-    { href: "/needs-attention", label: "Needs Attention", icon: <AlertIcon /> },
+    { href: "/custom-logic", label: "Custom Logic", icon: <CodeIcon /> },
   ];
 
   return (
@@ -191,20 +191,29 @@ export default function Sidebar() {
 
             return (
               <li key={item.href}>
-                <Link
-                  href={item.href!}
-                  className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                    ${
-                      isActive(item.href!)
-                        ? "bg-gray-800 text-white font-semibold border-l-4 border-gray-600"
-                        : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                    }
-                  `}
-                >
-                  {item.icon}
-                  <span className="text-sm font-medium">{item.label}</span>
-                </Link>
+                {item.disabled ? (
+                  <div
+                    className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 opacity-50 cursor-not-allowed"
+                  >
+                    {item.icon}
+                    <span className="text-sm font-medium line-through">{item.label}</span>
+                  </div>
+                ) : (
+                  <Link
+                    href={item.href!}
+                    className={`
+                      flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                      ${
+                        isActive(item.href!)
+                          ? "bg-gray-800 text-white font-semibold border-l-4 border-gray-600"
+                          : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                      }
+                    `}
+                  >
+                    {item.icon}
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </Link>
+                )}
               </li>
             );
           })}

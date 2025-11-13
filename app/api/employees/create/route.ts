@@ -4,7 +4,7 @@ import { sql } from '@/lib/db';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { badge_id, employee_name, position_ids } = body;
+    const { badge_id, employee_name, position_ids, leader, role } = body;
 
     // Validate input
     if (!badge_id || !employee_name) {
@@ -35,9 +35,9 @@ export async function POST(request: Request) {
 
     // Create the employee
     const newEmployee = await sql`
-      INSERT INTO employees (badge_id, employee_name, is_active)
-      VALUES (${badge_id}, ${employee_name}, true)
-      RETURNING employee_id, badge_id, employee_name, is_active, created_at
+      INSERT INTO employees (badge_id, employee_name, is_active, leader, role)
+      VALUES (${badge_id}, ${employee_name}, true, ${leader || null}, ${role || null})
+      RETURNING employee_id, badge_id, employee_name, is_active, leader, role, created_at
     `;
 
     const employee_id = newEmployee[0].employee_id;

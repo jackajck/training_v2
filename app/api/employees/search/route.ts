@@ -15,13 +15,15 @@ export async function GET(request: Request) {
           e.badge_id,
           e.employee_name,
           e.is_active,
+          e.leader,
+          e.role,
           e.created_at,
           STRING_AGG(p.position_name, ', ' ORDER BY p.position_name) as positions,
           STRING_AGG(p.position_id, ', ' ORDER BY p.position_id) as position_ids
         FROM employees e
         LEFT JOIN employee_positions ep ON e.employee_id = ep.employee_id
         LEFT JOIN positions p ON ep.position_id = p.position_id
-        GROUP BY e.employee_id, e.badge_id, e.employee_name, e.is_active, e.created_at
+        GROUP BY e.employee_id, e.badge_id, e.employee_name, e.is_active, e.leader, e.role, e.created_at
         ORDER BY e.employee_name ASC
         LIMIT ${parseInt(limit)}
       `;
@@ -49,6 +51,8 @@ export async function GET(request: Request) {
         e.badge_id,
         e.employee_name,
         e.is_active,
+        e.leader,
+        e.role,
         e.created_at,
         STRING_AGG(p.position_name, ', ' ORDER BY p.position_name) as positions,
         STRING_AGG(p.position_id, ', ' ORDER BY p.position_id) as position_ids
@@ -58,7 +62,7 @@ export async function GET(request: Request) {
       WHERE
         e.employee_name ILIKE ${'%' + query + '%'}
         OR e.badge_id ILIKE ${'%' + query + '%'}
-      GROUP BY e.employee_id, e.badge_id, e.employee_name, e.is_active, e.created_at
+      GROUP BY e.employee_id, e.badge_id, e.employee_name, e.is_active, e.leader, e.role, e.created_at
       ORDER BY e.employee_name ASC
       LIMIT 100
     `;

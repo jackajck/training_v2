@@ -15,6 +15,8 @@ export async function GET(
         e.badge_id,
         e.employee_name,
         e.is_active,
+        e.leader,
+        e.role,
         e.created_at
       FROM employees e
       WHERE e.badge_id = ${badge_id}
@@ -102,6 +104,55 @@ export async function GET(
     console.error('Error fetching employee details:', error);
     return NextResponse.json(
       { error: 'Failed to fetch employee details' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ badge_id: string }> }
+) {
+  try {
+    const { badge_id } = await params;
+    const body = await request.json();
+    const { leader, role } = body;
+
+    // Update the leader and/or role field
+    if (leader !== undefined && role !== undefined) {
+      await sql`
+        UPDATE employees
+        SET leader = ${leader}, role = ${role}
+        WHERE badge_id = ${badge_id}
+      `;
+    } else if (leader !== undefined) {
+      await sql`
+        UPDATE employees
+        SET leader = ${leader}
+        WHERE badge_id = ${badge_id}
+      `;
+    } else if (role !== undefined) {
+      await sql`
+        UPDATE employees
+        SET role = ${role}
+        WHERE badge_id = ${badge_id}
+      `;
+    } else {
+      return NextResponse.json(
+        { error: 'No fields to update' },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Employee updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating employee:', error);
+    return NextResponse.json(
+      { error: 'Failed to update employee' },
       { status: 500 }
     );
   }
