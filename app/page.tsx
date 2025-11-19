@@ -27,17 +27,11 @@ export default function Home() {
   const formatEasternDate = (dateString: string | null | undefined): string => {
     if (!dateString || dateString === '' || dateString === 'null') return '';
     try {
-      // Convert to string if it's a Date object
-      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
-
-      // Extract just the date portion (YYYY-MM-DD) to avoid timezone conversion issues
+      const dateStr = String(dateString);
       const datePart = dateStr.split('T')[0];
       const [year, month, day] = datePart.split('-').map(Number);
-
-      // Create date using local timezone
       const date = new Date(year, month - 1, day);
       if (isNaN(date.getTime())) return '';
-
       return date.toLocaleDateString('en-US');
     } catch (e) {
       console.error('Date formatting error:', e, dateString);
@@ -117,7 +111,7 @@ export default function Home() {
         // Parse expiration date properly to avoid timezone issues
         let expDate: Date | null = null;
         if (record.expiration_date) {
-          const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+          const dateStr = String(record.expiration_date);
           const datePart = dateStr.split('T')[0];
           const [year, month, day] = datePart.split('-').map(Number);
           expDate = new Date(year, month - 1, day);
@@ -264,7 +258,7 @@ export default function Home() {
                   // Parse expiration date properly to avoid timezone issues
                   let expDate: Date | null = null;
                   if (record.expiration_date) {
-                    const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+                    const dateStr = String(record.expiration_date);
                     const datePart = dateStr.split('T')[0];
                     const [year, month, day] = datePart.split('-').map(Number);
                     expDate = new Date(year, month - 1, day);

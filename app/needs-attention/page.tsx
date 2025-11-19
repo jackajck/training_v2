@@ -60,7 +60,7 @@ export default function NeedsAttentionPage() {
   const formatLocalDate = (dateString: string | null | undefined): string => {
     if (!dateString || dateString === '' || dateString === 'null') return '';
     try {
-      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+      const dateStr = String(dateString);
       const datePart = dateStr.split('T')[0];
       const [year, month, day] = datePart.split('-').map(Number);
       const date = new Date(year, month - 1, day);

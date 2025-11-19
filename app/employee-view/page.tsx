@@ -54,7 +54,7 @@ export default function EmployeeViewPage() {
   const formatLocalDate = (dateString: string | null | undefined): string => {
     if (!dateString || dateString === '' || dateString === 'null') return '';
     try {
-      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+      const dateStr = String(dateString);
       const datePart = dateStr.split('T')[0];
       const [year, month, day] = datePart.split('-').map(Number);
       const date = new Date(year, month - 1, day);
@@ -409,7 +409,7 @@ export default function EmployeeViewPage() {
                                       <div>{formatLocalDate(record.expiration_date)}</div>
                                       <div className="text-xs text-yellow-400">
                                         {(() => {
-                                          const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+                                          const dateStr = String(record.expiration_date);
                                           const datePart = dateStr.split('T')[0];
                                           const [year, month, day] = datePart.split('-').map(Number);
                                           const expDate = new Date(year, month - 1, day);
