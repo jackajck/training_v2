@@ -56,6 +56,22 @@ export default function NeedsAttentionPage() {
   const [problematicPositions, setProblematicPositions] = useState<ProblematicPosition[]>([]);
   const [problematicCourses, setProblematicCourses] = useState<ProblematicCourse[]>([]);
 
+  // Helper function to format dates - extracts just the date portion to avoid timezone issues
+  const formatLocalDate = (dateString: string | null | undefined): string => {
+    if (!dateString || dateString === '' || dateString === 'null') return '';
+    try {
+      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+      const datePart = dateStr.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      if (isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('en-US');
+    } catch (e) {
+      console.error('Date formatting error:', e, dateString);
+      return '';
+    }
+  };
+
   useEffect(() => {
     fetchProblems();
   }, []);
@@ -302,7 +318,7 @@ export default function NeedsAttentionPage() {
                     emp.employee_name,
                     emp.badge_id,
                     emp.is_active ? 'Active' : 'Inactive',
-                    new Date(emp.created_at).toLocaleDateString()
+                    formatLocalDate(emp.created_at)
                   ]
                 )}
                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors text-sm font-semibold whitespace-nowrap"
@@ -337,7 +353,7 @@ export default function NeedsAttentionPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-400">
-                        {new Date(emp.created_at).toLocaleDateString()}
+                        {formatLocalDate(emp.created_at)}
                       </td>
                     </tr>
                   ))}

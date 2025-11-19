@@ -55,6 +55,28 @@ export default function EmployeesPage() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [expandedTrainingRow, setExpandedTrainingRow] = useState<number | null>(null);
 
+  // Helper function to format dates - extracts just the date portion to avoid timezone issues
+  const formatEasternDate = (dateString: string | null | undefined): string => {
+    if (!dateString || dateString === '' || dateString === 'null') return '';
+    try {
+      // Convert to string if it's a Date object
+      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+
+      // Extract just the date portion (YYYY-MM-DD) to avoid timezone conversion issues
+      const datePart = dateStr.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+
+      // Create date using local timezone
+      const date = new Date(year, month - 1, day);
+      if (isNaN(date.getTime())) return '';
+
+      return date.toLocaleDateString('en-US');
+    } catch (e) {
+      console.error('Date formatting error:', e, dateString);
+      return '';
+    }
+  };
+
   // Add position modal state
   const [showAddPositionModal, setShowAddPositionModal] = useState(false);
   const [allPositions, setAllPositions] = useState<AllPosition[]>([]);
@@ -805,7 +827,7 @@ export default function EmployeesPage() {
                             <td className="px-3 py-2 text-gray-400">{record.position_name}</td>
                             <td className="px-3 py-2 text-gray-300">
                               {record.completion_date ? (
-                                <div>{new Date(record.completion_date).toLocaleDateString()}</div>
+                                <div>{formatEasternDate(record.completion_date)}</div>
                               ) : (
                                 <span className="text-gray-500">-</span>
                               )}
@@ -813,9 +835,15 @@ export default function EmployeesPage() {
                             <td className="px-3 py-2 text-gray-300">
                               {record.expiration_date ? (
                                 <div>
-                                  <div>{new Date(record.expiration_date).toLocaleDateString()}</div>
+                                  <div>{formatEasternDate(record.expiration_date)}</div>
                                   <div className="text-xs text-yellow-400">
-                                    {formatDistanceToNow(new Date(record.expiration_date), { addSuffix: true })}
+                                    {(() => {
+                                      const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+                                      const datePart = dateStr.split('T')[0];
+                                      const [year, month, day] = datePart.split('-').map(Number);
+                                      const expDate = new Date(year, month - 1, day);
+                                      return formatDistanceToNow(expDate, { addSuffix: true });
+                                    })()}
                                   </div>
                                 </div>
                               ) : record.completion_date ? (

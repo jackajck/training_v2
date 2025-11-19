@@ -31,6 +31,28 @@ export default function RawUserPage() {
   const [loadingCertificates, setLoadingCertificates] = useState(false);
   const [expandedCertificateRow, setExpandedCertificateRow] = useState<number | null>(null);
 
+  // Helper function to format dates - extracts just the date portion to avoid timezone issues
+  const formatEasternDate = (dateString: string | null | undefined): string => {
+    if (!dateString || dateString === '' || dateString === 'null') return '';
+    try {
+      // Convert to string if it's a Date object
+      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+
+      // Extract just the date portion (YYYY-MM-DD) to avoid timezone conversion issues
+      const datePart = dateStr.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+
+      // Create date using local timezone
+      const date = new Date(year, month - 1, day);
+      if (isNaN(date.getTime())) return '';
+
+      return date.toLocaleDateString('en-US');
+    } catch (e) {
+      console.error('Date formatting error:', e, dateString);
+      return '';
+    }
+  };
+
   useEffect(() => {
     // Load initial employees
     fetchEmployees();
@@ -228,12 +250,12 @@ export default function RawUserPage() {
                           <td className="px-3 py-2 text-gray-300 font-mono">{cert.course_id}</td>
                           <td className="px-3 py-2 text-gray-200">{cert.course_name}</td>
                           <td className="px-3 py-2 text-gray-300">
-                            {new Date(cert.completion_date).toLocaleDateString()}
+                            {formatEasternDate(cert.completion_date)}
                           </td>
                           <td className="px-3 py-2 text-gray-300">
                             {cert.expiration_date ? (
                               <span className={cert.status === 'Expired' ? 'text-red-400 font-semibold' : ''}>
-                                {new Date(cert.expiration_date).toLocaleDateString()}
+                                {formatEasternDate(cert.expiration_date)}
                               </span>
                             ) : (
                               <span className="text-blue-400">No Expiration</span>
@@ -243,7 +265,7 @@ export default function RawUserPage() {
                             {cert.duration_months ?? '-'}
                           </td>
                           <td className="px-3 py-2 text-gray-400">
-                            {new Date(cert.created_at).toLocaleDateString()}
+                            {formatEasternDate(cert.created_at)}
                           </td>
                         </tr>
                         {expandedCertificateRow === idx && (

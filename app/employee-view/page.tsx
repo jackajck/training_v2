@@ -50,6 +50,22 @@ export default function EmployeeViewPage() {
   const [expandedTrainingRow, setExpandedTrainingRow] = useState<number | null>(null);
   const [positionCourses, setPositionCourses] = useState<{ [key: string]: Course[] }>({});
 
+  // Helper function to format dates - extracts just the date portion to avoid timezone issues
+  const formatLocalDate = (dateString: string | null | undefined): string => {
+    if (!dateString || dateString === '' || dateString === 'null') return '';
+    try {
+      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+      const datePart = dateStr.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      if (isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('en-US');
+    } catch (e) {
+      console.error('Date formatting error:', e, dateString);
+      return '';
+    }
+  };
+
   useEffect(() => {
     fetchEmployees();
   }, []);
@@ -382,7 +398,7 @@ export default function EmployeeViewPage() {
                                 <td className="px-3 py-2 text-gray-400">{record.position_name}</td>
                                 <td className="px-3 py-2 text-gray-300">
                                   {record.completion_date ? (
-                                    <div>{new Date(record.completion_date).toLocaleDateString()}</div>
+                                    <div>{formatLocalDate(record.completion_date)}</div>
                                   ) : (
                                     <span className="text-gray-500">-</span>
                                   )}
@@ -390,9 +406,15 @@ export default function EmployeeViewPage() {
                                 <td className="px-3 py-2 text-gray-300">
                                   {record.expiration_date ? (
                                     <div>
-                                      <div>{new Date(record.expiration_date).toLocaleDateString()}</div>
+                                      <div>{formatLocalDate(record.expiration_date)}</div>
                                       <div className="text-xs text-yellow-400">
-                                        {formatDistanceToNow(new Date(record.expiration_date), { addSuffix: true })}
+                                        {(() => {
+                                          const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+                                          const datePart = dateStr.split('T')[0];
+                                          const [year, month, day] = datePart.split('-').map(Number);
+                                          const expDate = new Date(year, month - 1, day);
+                                          return formatDistanceToNow(expDate, { addSuffix: true });
+                                        })()}
                                       </div>
                                     </div>
                                   ) : record.completion_date ? (

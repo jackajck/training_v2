@@ -23,6 +23,28 @@ export default function Home() {
   const [counts, setCounts] = useState({ expired: 0, '7days': 0, '30days': 0, '90days': 0 });
   const [loading, setLoading] = useState(true);
 
+  // Helper function to format dates - extracts just the date portion to avoid timezone issues
+  const formatEasternDate = (dateString: string | null | undefined): string => {
+    if (!dateString || dateString === '' || dateString === 'null') return '';
+    try {
+      // Convert to string if it's a Date object
+      const dateStr = typeof dateString === 'string' ? dateString : dateString.toString();
+
+      // Extract just the date portion (YYYY-MM-DD) to avoid timezone conversion issues
+      const datePart = dateStr.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+
+      // Create date using local timezone
+      const date = new Date(year, month - 1, day);
+      if (isNaN(date.getTime())) return '';
+
+      return date.toLocaleDateString('en-US');
+    } catch (e) {
+      console.error('Date formatting error:', e, dateString);
+      return '';
+    }
+  };
+
   // Fetch counts for all tabs
   useEffect(() => {
     fetchAllCounts();
@@ -92,11 +114,18 @@ export default function Home() {
 
       // CSV rows
       const rows = allRecords.map((record: TrainingRecord) => {
-        const expDate = new Date(record.expiration_date);
-        const isExpired = expDate < new Date();
+        // Parse expiration date properly to avoid timezone issues
+        let expDate: Date | null = null;
+        if (record.expiration_date) {
+          const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+          const datePart = dateStr.split('T')[0];
+          const [year, month, day] = datePart.split('-').map(Number);
+          expDate = new Date(year, month - 1, day);
+        }
+        const isExpired = expDate ? expDate < new Date() : false;
         const status = isExpired ? 'Expired' : 'Expiring';
-        const timeUntilExpiry = formatDistanceToNow(expDate, { addSuffix: true });
-        const completionDate = record.completion_date ? new Date(record.completion_date).toLocaleDateString() : '-';
+        const timeUntilExpiry = expDate ? formatDistanceToNow(expDate, { addSuffix: true }) : 'N/A';
+        const completionDate = formatEasternDate(record.completion_date);
 
         return [
           status,
@@ -106,8 +135,8 @@ export default function Home() {
           record.job_code,
           record.course_name,
           record.course_id,
-          completionDate,
-          expDate.toLocaleDateString(),
+          completionDate || '-',
+          formatEasternDate(record.expiration_date) || 'No Expiration',
           timeUntilExpiry
         ];
       });
@@ -232,8 +261,15 @@ export default function Home() {
               </thead>
               <tbody className="divide-y divide-gray-700">
                 {records.map((record, idx) => {
-                  const expDate = new Date(record.expiration_date);
-                  const isExpired = expDate < new Date();
+                  // Parse expiration date properly to avoid timezone issues
+                  let expDate: Date | null = null;
+                  if (record.expiration_date) {
+                    const dateStr = typeof record.expiration_date === 'string' ? record.expiration_date : record.expiration_date.toString();
+                    const datePart = dateStr.split('T')[0];
+                    const [year, month, day] = datePart.split('-').map(Number);
+                    expDate = new Date(year, month - 1, day);
+                  }
+                  const isExpired = expDate ? expDate < new Date() : false;
                   return (
                     <tr key={idx} className="hover:bg-gray-700 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap border-r border-gray-700">
@@ -256,13 +292,13 @@ export default function Home() {
                         <div className="text-xs text-gray-500">{record.course_id}</div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-300 border-r border-gray-700">
-                        {record.completion_date ? new Date(record.completion_date).toLocaleDateString() : '-'}
+                        {formatEasternDate(record.completion_date) || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-300 border-r border-gray-700">
-                        {expDate.toLocaleDateString()}
+                        {formatEasternDate(record.expiration_date) || 'No Expiration'}
                       </td>
                       <td className="px-6 py-4 text-sm text-yellow-400">
-                        {formatDistanceToNow(expDate, { addSuffix: true })}
+                        {expDate ? formatDistanceToNow(expDate, { addSuffix: true }) : 'N/A'}
                       </td>
                     </tr>
                   );
