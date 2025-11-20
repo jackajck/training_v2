@@ -34,6 +34,7 @@ interface TrainingRecord {
   position_name: string;
   completion_date: string | null;
   expiration_date: string | null;
+  training_id: number | null;
   status: string;
   notes: string | null;
 }
@@ -90,6 +91,15 @@ export default function EmployeesPage() {
     notes: ''
   });
   const [addingTraining, setAddingTraining] = useState(false);
+
+  // Extend certificate modal state
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [extendingRecord, setExtendingRecord] = useState<TrainingRecord | null>(null);
+  const [extendForm, setExtendForm] = useState({
+    months_to_extend: 3,
+    extension_notes: ''
+  });
+  const [extending, setExtending] = useState(false);
 
   // Position courses state
   const [positionCourses, setPositionCourses] = useState<{ [key: string]: Course[] }>({});
@@ -406,6 +416,73 @@ export default function EmployeesPage() {
       alert('Failed to add training record');
     } finally {
       setAddingTraining(false);
+    }
+  };
+
+  // Extend certificate modal functions
+  const openExtendModal = (record: TrainingRecord) => {
+    setExtendingRecord(record);
+    setExtendForm({
+      months_to_extend: 3,
+      extension_notes: ''
+    });
+    setShowExtendModal(true);
+  };
+
+  const closeExtendModal = () => {
+    setShowExtendModal(false);
+    setExtendingRecord(null);
+    setExtendForm({ months_to_extend: 3, extension_notes: '' });
+  };
+
+  const calculateNewExpiration = () => {
+    if (!extendingRecord?.expiration_date) return '';
+
+    const dateStr = String(extendingRecord.expiration_date);
+    const datePart = dateStr.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    const currentExp = new Date(year, month - 1, day);
+    const newExp = new Date(currentExp);
+    newExp.setMonth(newExp.getMonth() + extendForm.months_to_extend);
+
+    return newExp.toLocaleDateString('en-US');
+  };
+
+  const handleExtendCertificate = async () => {
+    if (!extendingRecord?.training_id || !selectedEmployee) return;
+
+    if (!extendForm.extension_notes.trim()) {
+      alert('Please provide a reason for the extension');
+      return;
+    }
+
+    setExtending(true);
+    try {
+      const response = await fetch('/api/training/extend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          training_id: extendingRecord.training_id,
+          months_to_extend: extendForm.months_to_extend,
+          extension_notes: extendForm.extension_notes
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('Certificate extended successfully!');
+        closeExtendModal();
+        // Refresh employee details
+        handleSelectEmployee(selectedEmployee);
+      } else {
+        alert(data.error || 'Failed to extend certificate');
+      }
+    } catch (error) {
+      console.error('Error extending certificate:', error);
+      alert('Error extending certificate');
+    } finally {
+      setExtending(false);
     }
   };
 
@@ -849,14 +926,32 @@ export default function EmployeesPage() {
                           </tr>
                           {expandedTrainingRow === idx && (
                             <tr className="bg-gray-900">
-                              <td colSpan={5} className="px-3 py-3">
-                                <div className="pl-8">
-                                  <div className="text-xs font-semibold text-gray-400 mb-1">Notes:</div>
-                                  {record.notes ? (
-                                    <div className="text-sm text-gray-300 whitespace-pre-wrap">{record.notes}</div>
-                                  ) : (
-                                    <div className="text-sm text-gray-500 italic">No notes recorded</div>
-                                  )}
+                              <td colSpan={5} className="px-3 py-4">
+                                <div className="pl-8 pr-4">
+                                  <div className="flex gap-3">
+                                    {/* Notes Section - 4/5 width */}
+                                    <div className="flex-1 bg-gray-800 rounded-lg p-4">
+                                      <div className="text-xs font-semibold text-gray-400 mb-2">Notes</div>
+                                      {record.notes ? (
+                                        <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{record.notes}</div>
+                                      ) : (
+                                        <div className="text-sm text-gray-500 italic">No notes recorded</div>
+                                      )}
+                                    </div>
+
+                                    {/* Extend Button - 1/5 width - Only show if there's a training_id and expiration_date */}
+                                    {record.training_id && record.expiration_date && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openExtendModal(record);
+                                        }}
+                                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors text-xs font-semibold whitespace-nowrap self-stretch"
+                                      >
+                                        Extend Certificate
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -1149,6 +1244,107 @@ export default function EmployeesPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Extend Certificate Side Panel */}
+      <div className={`fixed top-0 left-0 h-full w-96 bg-gray-800 border-r border-gray-700 shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${showExtendModal ? 'translate-x-0' : '-translate-x-full'}`}>
+        {extendingRecord && (
+        <div className="flex flex-col h-full">
+          <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+            <h3 className="text-lg font-semibold">Extend Certificate</h3>
+            <button
+              onClick={closeExtendModal}
+              className="text-gray-400 hover:text-gray-200 font-bold text-xl"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Employee & Course Info */}
+            <div className="bg-gray-900 rounded p-3">
+              <div className="text-xs text-gray-400 mb-1">Employee</div>
+              <div className="text-sm font-medium">{selectedEmployee?.employee_name}</div>
+              <div className="text-xs text-gray-400 mt-2">Course</div>
+              <div className="text-sm">{extendingRecord.course_name}</div>
+              <div className="text-xs text-gray-500">ID: {extendingRecord.required_course_id}</div>
+            </div>
+
+            {/* Current Expiration */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Current Expiration Date
+              </label>
+              <div className="text-sm text-white bg-gray-900 rounded px-3 py-2">
+                {formatEasternDate(extendingRecord.expiration_date)}
+              </div>
+            </div>
+
+            {/* Months to Extend */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Extend by (months)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={extendForm.months_to_extend}
+                onChange={(e) => setExtendForm(prev => ({
+                  ...prev,
+                  months_to_extend: parseInt(e.target.value) || 1
+                }))}
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* New Expiration Preview */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                New Expiration Date
+              </label>
+              <div className="text-sm text-green-400 bg-gray-900 rounded px-3 py-2 font-semibold">
+                {calculateNewExpiration()}
+              </div>
+            </div>
+
+            {/* Extension Notes */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Reason for Extension *
+              </label>
+              <textarea
+                value={extendForm.extension_notes}
+                onChange={(e) => setExtendForm(prev => ({
+                  ...prev,
+                  extension_notes: e.target.value
+                }))}
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 h-24 resize-none"
+                placeholder="Explain why this certificate is being extended..."
+              />
+              <p className="text-xs text-gray-500 mt-1">Required field</p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="p-4 border-t border-gray-700 flex gap-2">
+            <button
+              onClick={closeExtendModal}
+              disabled={extending}
+              className="flex-1 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors text-sm font-semibold disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleExtendCertificate}
+              disabled={extending || !extendForm.extension_notes.trim()}
+              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors text-sm font-semibold disabled:opacity-50"
+            >
+              {extending ? 'Extending...' : 'Extend Certificate'}
+            </button>
+          </div>
+        </div>
+        )}
       </div>
     </div>
   );
