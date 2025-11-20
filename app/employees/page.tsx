@@ -792,11 +792,9 @@ export default function EmployeesPage() {
 
                                 {/* Courses with timeline dots */}
                                 <div className="space-y-3">
-                                  {courses.map((course, index) => {
+                                  {courses.map((course) => {
                                     const status = getCourseStatus(course.course_id);
                                     const statusColor = getStatusColorForCourse(status);
-                                    // Convert bg-color to actual color for the dot
-                                    const dotColor = statusColor.replace('bg-', '');
 
                                     return (
                                       <div key={course.course_id} className="relative">
@@ -912,7 +910,8 @@ export default function EmployeesPage() {
                                       const dateStr = String(record.expiration_date);
                                       const datePart = dateStr.split('T')[0];
                                       const [year, month, day] = datePart.split('-').map(Number);
-                                      const expDate = new Date(year, month - 1, day);
+                                      // Set time to end of day (23:59:59) so certificates expire at day's end
+                                      const expDate = new Date(year, month - 1, day, 23, 59, 59);
                                       return formatDistanceToNow(expDate, { addSuffix: true });
                                     })()}
                                   </div>

@@ -454,7 +454,8 @@ export default function OrgTreePage() {
                                         const dateStr = String(record.expiration_date);
                                         const datePart = dateStr.split('T')[0];
                                         const [year, month, day] = datePart.split('-').map(Number);
-                                        const expDate = new Date(year, month - 1, day);
+                                        // Set time to end of day (23:59:59) so certificates expire at day's end
+                                        const expDate = new Date(year, month - 1, day, 23, 59, 59);
                                         return formatDistanceToNow(expDate, { addSuffix: true });
                                       })()}
                                     </div>
