@@ -96,7 +96,7 @@ export default function EmployeesPage() {
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [extendingRecord, setExtendingRecord] = useState<TrainingRecord | null>(null);
   const [extendForm, setExtendForm] = useState({
-    months_to_extend: 3,
+    new_expiration_date: '',
     extension_notes: ''
   });
   const [extending, setExtending] = useState(false);
@@ -422,8 +422,11 @@ export default function EmployeesPage() {
   // Extend certificate modal functions
   const openExtendModal = (record: TrainingRecord) => {
     setExtendingRecord(record);
+    // Initialize with current expiration date as starting point
+    const dateStr = record.expiration_date ? String(record.expiration_date) : '';
+    const datePart = dateStr.split('T')[0];
     setExtendForm({
-      months_to_extend: 3,
+      new_expiration_date: datePart,
       extension_notes: ''
     });
     setShowExtendModal(true);
@@ -432,20 +435,7 @@ export default function EmployeesPage() {
   const closeExtendModal = () => {
     setShowExtendModal(false);
     setExtendingRecord(null);
-    setExtendForm({ months_to_extend: 3, extension_notes: '' });
-  };
-
-  const calculateNewExpiration = () => {
-    if (!extendingRecord?.expiration_date) return '';
-
-    const dateStr = String(extendingRecord.expiration_date);
-    const datePart = dateStr.split('T')[0];
-    const [year, month, day] = datePart.split('-').map(Number);
-    const currentExp = new Date(year, month - 1, day);
-    const newExp = new Date(currentExp);
-    newExp.setMonth(newExp.getMonth() + extendForm.months_to_extend);
-
-    return newExp.toLocaleDateString('en-US');
+    setExtendForm({ new_expiration_date: '', extension_notes: '' });
   };
 
   const handleExtendCertificate = async () => {
@@ -456,6 +446,11 @@ export default function EmployeesPage() {
       return;
     }
 
+    if (!extendForm.new_expiration_date) {
+      alert('Please select a new expiration date');
+      return;
+    }
+
     setExtending(true);
     try {
       const response = await fetch('/api/training/extend', {
@@ -463,7 +458,7 @@ export default function EmployeesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           training_id: extendingRecord.training_id,
-          months_to_extend: extendForm.months_to_extend,
+          new_expiration_date: extendForm.new_expiration_date,
           extension_notes: extendForm.extension_notes
         })
       });
@@ -1279,32 +1274,21 @@ export default function EmployeesPage() {
               </div>
             </div>
 
-            {/* Months to Extend */}
+            {/* New Expiration Date Picker */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">
-                Extend by (months)
+                New Expiration Date *
               </label>
               <input
-                type="number"
-                min="1"
-                max="120"
-                value={extendForm.months_to_extend}
+                type="date"
+                value={extendForm.new_expiration_date}
                 onChange={(e) => setExtendForm(prev => ({
                   ...prev,
-                  months_to_extend: parseInt(e.target.value) || 1
+                  new_expiration_date: e.target.value
                 }))}
                 className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
               />
-            </div>
-
-            {/* New Expiration Preview */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                New Expiration Date
-              </label>
-              <div className="text-sm text-green-400 bg-gray-900 rounded px-3 py-2 font-semibold">
-                {calculateNewExpiration()}
-              </div>
+              <p className="text-xs text-gray-500 mt-1">Select any expiration date</p>
             </div>
 
             {/* Extension Notes */}
@@ -1336,7 +1320,7 @@ export default function EmployeesPage() {
             </button>
             <button
               onClick={handleExtendCertificate}
-              disabled={extending || !extendForm.extension_notes.trim()}
+              disabled={extending || !extendForm.extension_notes.trim() || !extendForm.new_expiration_date}
               className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors text-sm font-semibold disabled:opacity-50"
             >
               {extending ? 'Extending...' : 'Extend Certificate'}
