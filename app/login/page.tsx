@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function Login() {
-  const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,15 +20,15 @@ export default function Login() {
       });
 
       if (res.ok) {
-        router.push('/');
-        router.refresh();
+        // Use hard redirect to ensure cookie is included in next request
+        window.location.href = '/';
       } else {
         setError('Invalid password');
         setPassword('');
+        setLoading(false);
       }
     } catch (error) {
       setError('Login failed');
-    } finally {
       setLoading(false);
     }
   };
