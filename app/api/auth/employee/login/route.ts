@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       (await cookies()).set('employee_auth', 'authenticated', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax', // 'lax' allows cookie to be sent when typing URL in new tab
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/',
       });
