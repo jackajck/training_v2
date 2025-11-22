@@ -220,11 +220,17 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      {/* Beta Notice */}
-      <div className="p-4 m-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
-        <p className="text-xs text-yellow-200 leading-relaxed">
-          This application is in Beta, contact jb3
-        </p>
+      {/* Logout Button */}
+      <div className="p-4 border-t border-gray-700">
+        <button
+          onClick={async () => {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+          }}
+          className="w-full px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 hover:text-white transition-colors text-sm font-medium"
+        >
+          Logout
+        </button>
       </div>
     </div>
   );
