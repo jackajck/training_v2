@@ -99,6 +99,9 @@ export default function EmployeesPage() {
     new_expiration_date: '',
     extension_notes: ''
   });
+
+  // Training search state
+  const [trainingSearchQuery, setTrainingSearchQuery] = useState('');
   const [extending, setExtending] = useState(false);
 
   // Position courses state
@@ -825,6 +828,42 @@ export default function EmployeesPage() {
                     + Add Training
                   </button>
                 </div>
+
+                {/* Search bar for training records */}
+                <div className="mb-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search certifications..."
+                      value={trainingSearchQuery}
+                      onChange={(e) => setTrainingSearchQuery(e.target.value)}
+                      className="w-full px-3 py-2 pl-9 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <svg
+                      className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                    {trainingSearchQuery && (
+                      <button
+                        onClick={() => setTrainingSearchQuery('')}
+                        className="absolute right-2 top-2 text-gray-400 hover:text-white"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
                 {(() => {
                   const expired = trainingRecords.filter(r => r.status === 'Expired').length;
                   const missing = trainingRecords.filter(r => r.status === 'Never Completed').length;
@@ -863,7 +902,18 @@ export default function EmployeesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-700">
-                      {trainingRecords.map((record, idx) => (
+                      {trainingRecords
+                        .filter(record => {
+                          if (!trainingSearchQuery) return true;
+                          const query = trainingSearchQuery.toLowerCase();
+                          return (
+                            record.course_name.toLowerCase().includes(query) ||
+                            record.required_course_id.toLowerCase().includes(query) ||
+                            record.position_name.toLowerCase().includes(query) ||
+                            record.status.toLowerCase().includes(query)
+                          );
+                        })
+                        .map((record, idx) => (
                         <React.Fragment key={idx}>
                           <tr
                             onClick={() => setExpandedTrainingRow(expandedTrainingRow === idx ? null : idx)}
