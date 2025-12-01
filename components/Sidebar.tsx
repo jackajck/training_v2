@@ -84,7 +84,7 @@ const PlusIcon = () => (
   </svg>
 );
 
-const CodeIcon = () => (
+const DocumentIcon = () => (
   <svg
     className="w-5 h-5"
     fill="none"
@@ -95,7 +95,7 @@ const CodeIcon = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
       strokeWidth={2}
-      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
     />
   </svg>
 );
@@ -168,7 +168,7 @@ export default function Sidebar() {
     { href: "/raw-user", label: "RAW user", icon: <DatabaseIcon /> },
     { href: "/employee-view", label: "Employee View", icon: <UserIcon />, disabled: true },
     { type: "divider" },
-    { href: "/custom-logic", label: "Custom Logic", icon: <CodeIcon /> },
+    { href: "/custom-reports", label: "Custom Reports", icon: <DocumentIcon /> },
   ];
 
   return (
