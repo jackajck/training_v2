@@ -173,6 +173,11 @@ export default function Sidebar() {
 
   return (
     <div className="w-64 bg-gray-900 h-screen fixed left-0 top-0 flex flex-col border-r border-gray-700">
+      {/* Warning Banner */}
+      <div className="bg-yellow-600 text-black px-3 py-2 text-center">
+        <p className="text-xs font-bold">⚠️ Do not use until we have a meeting about courses.</p>
+      </div>
+
       {/* Header */}
       <div className="p-6 border-b border-gray-700">
         <h1 className="text-xl font-bold text-white">Training Tracker</h1>

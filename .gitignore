@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# data files
+course_compare.csv
+course-groups-review-*.xlsx
+
+# documentation (internal)
+docs/*.md
