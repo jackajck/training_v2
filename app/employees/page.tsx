@@ -37,6 +37,10 @@ interface TrainingRecord {
   training_id: number | null;
   status: string;
   notes: string | null;
+  match_type: 'exact' | 'group' | null;
+  group_code: string | null;
+  matched_course_id: string | null;
+  matched_course_name: string | null;
 }
 
 interface Course {
@@ -937,6 +941,16 @@ export default function EmployeesPage() {
                             <td className="px-3 py-2 text-gray-300">
                               <div className="font-medium">{record.course_name}</div>
                               <div className="text-gray-500">ID: {record.required_course_id}</div>
+                              {record.match_type === 'group' && record.group_code && (
+                                <div className="mt-1 flex items-center gap-1">
+                                  <span className="px-1.5 py-0.5 bg-purple-600/30 text-purple-300 rounded text-xs font-medium">
+                                    {record.group_code} Group
+                                  </span>
+                                  <span className="text-xs text-gray-500" title={`Has: ${record.matched_course_name}`}>
+                                    via {record.matched_course_id}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-gray-400">{record.position_name}</td>
                             <td className="px-3 py-2 text-gray-300">
@@ -973,24 +987,43 @@ export default function EmployeesPage() {
                               <td colSpan={5} className="px-3 py-4">
                                 <div className="pl-8 pr-4">
                                   <div className="flex gap-3">
-                                    {/* Notes Section - 4/5 width */}
-                                    <div className="flex-1 bg-gray-800 rounded-lg p-4">
-                                      <div className="text-xs font-semibold text-gray-400 mb-2">Notes</div>
-                                      {record.notes ? (
-                                        <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{record.notes}</div>
-                                      ) : (
-                                        <div className="text-sm text-gray-500 italic">No notes recorded</div>
+                                    {/* Notes & Group Match Section */}
+                                    <div className="flex-1 space-y-3">
+                                      {/* Group Match Info */}
+                                      {record.match_type === 'group' && record.matched_course_name && (
+                                        <div className="bg-purple-900/20 border border-purple-700/30 rounded-lg p-4">
+                                          <div className="text-xs font-semibold text-purple-300 mb-2">Group Match ({record.group_code})</div>
+                                          <div className="text-sm text-gray-300">
+                                            <span className="text-gray-400">Required:</span> {record.course_name}
+                                          </div>
+                                          <div className="text-sm text-gray-300 mt-1">
+                                            <span className="text-gray-400">Has:</span> {record.matched_course_name}
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-2">
+                                            Both courses belong to the {record.group_code} group, so this satisfies the requirement.
+                                          </div>
+                                        </div>
                                       )}
+
+                                      {/* Notes Section */}
+                                      <div className="bg-gray-800 rounded-lg p-4">
+                                        <div className="text-xs font-semibold text-gray-400 mb-2">Notes</div>
+                                        {record.notes ? (
+                                          <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{record.notes}</div>
+                                        ) : (
+                                          <div className="text-sm text-gray-500 italic">No notes recorded</div>
+                                        )}
+                                      </div>
                                     </div>
 
-                                    {/* Extend Button - 1/5 width - Only show if there's a training_id and expiration_date */}
+                                    {/* Extend Button - Only show if there's a training_id and expiration_date */}
                                     {record.training_id && record.expiration_date && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           openExtendModal(record);
                                         }}
-                                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors text-xs font-semibold whitespace-nowrap self-stretch"
+                                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors text-xs font-semibold whitespace-nowrap self-start"
                                       >
                                         Extend Certificate
                                       </button>

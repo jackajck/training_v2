@@ -215,3 +215,211 @@ Notes are saved with the training record and can be used for:
 - Cursor pointer, hover effects
 - Dark background (bg-gray-900) for expanded section
 - Whitespace preserved for multi-line notes
+
+---
+
+## 2025-12-02: Course Groups Feature Implementation
+
+### Overview
+Implemented course groups to allow equivalent courses with different IDs to satisfy the same training requirement. For example, if a position requires course 99939 (T717 Concepts...) but an employee has course 14350 (T717 Machines...), the system now recognizes these as equivalent because they're both in the T717 group.
+
+### The Problem
+Previously, the system matched training requirements by **exact course ID only**. This caused issues when:
+1. A position requires course **99939** (`T717 Concepts and Techniques of Machine Safeguarding`)
+2. An employee has completed course **14350** (`T717 Machines and Machine Guarding`)
+3. Both are "T717" courses, but the system showed **"Missing"** because IDs don't match
+
+### The Solution
+Group courses by their T-code prefix. When checking if an employee satisfies a requirement:
+1. Look up if the required course belongs to an enabled group (e.g., T717)
+2. If yes, check if the employee has **ANY** course in that group
+3. Use the **latest expiration date** across all courses in the group
+
+### Database Changes
+
+#### New Tables (created previously)
+```sql
+course_groups
+├── group_id (PK, SERIAL)
+├── group_code (VARCHAR, e.g., "T717")
+├── group_name (VARCHAR)
+├── is_enabled (BOOLEAN, DEFAULT false) -- NEW COLUMN ADDED TODAY
+└── created_at (TIMESTAMP)
+
+course_group_members
+├── group_id (FK)
+└── course_id (FK)
+```
+
+#### Migration Script
+- **File**: `/scripts/add-course-groups-enabled.ts`
+- Added `is_enabled` column to `course_groups` table
+- Allows selective enabling of course groups
+- Run with: `npx tsx scripts/add-course-groups-enabled.ts`
+
+#### Enable Script
+- **File**: `/scripts/enable-course-groups.ts`
+- Enables all course groups that have position requirements
+- Run with: `npx tsx scripts/enable-course-groups.ts`
+- **Result**: 59 total groups, all enabled
+
+### Files Modified
+
+#### 1. Employee Lookup API - Group Matching Logic
+- **File**: `/app/api/employees/[badge_id]/route.ts`
+- Added CTEs for group matching:
+  - `required_course_groups` - finds enabled groups for required courses
+  - `employee_group_training` - finds employee's training in enabled groups
+- Query now tries exact match first, falls back to group match
+- Returns `match_type` ('exact' or 'group'), `group_code`, `matched_course_id`, `matched_course_name`
+- Uses **latest expiration date** when multiple courses in group (`ORDER BY expiration_date DESC NULLS LAST`)
+
+#### 2. Employee Page UI - Match Type Indicator
+- **File**: `/app/employees/page.tsx`
+- Updated `TrainingRecord` interface to include new fields:
+  ```typescript
+  match_type: 'exact' | 'group' | null;
+  group_code: string | null;
+  matched_course_id: string | null;
+  matched_course_name: string | null;
+  ```
+- Added purple badge showing group match info in training table
+- Expanded row shows detailed group match explanation when applicable:
+  - Required course name
+  - Actual course the employee has
+  - Explanation that both belong to same group
+
+### How Matching Works
+
+#### Exact Match (Priority 1)
+```
+Position requires course_id = 99939
+Employee has course_id = 99939
+Result: MATCH (exact) → Uses that course's expiration
+```
+
+#### Group Match (Priority 2 - Only if no exact match)
+```
+Position requires course_id = 99939
+→ 99939 belongs to enabled group "T717"
+→ T717 group contains: [99939, 14350, 13512]
+
+Employee has course_id = 14350 (but NOT 99939)
+→ 14350 is in T717 group
+Result: MATCH (group) → Uses 14350's expiration date
+```
+
+### UI Display
+
+#### Training Table
+- Shows purple badge: `T717 Group` with `via 14350`
+- Indicates the requirement was satisfied via group matching
+
+#### Expanded Row (click to expand)
+- Purple highlighted box showing:
+  - "Group Match (T717)"
+  - Required: [original course name]
+  - Has: [actual course employee completed]
+  - Explanation text
+
+### Scripts Created
+
+| Script | Purpose | Command |
+|--------|---------|---------|
+| `scripts/add-course-groups-enabled.ts` | Add is_enabled column | `npx tsx scripts/add-course-groups-enabled.ts` |
+| `scripts/enable-course-groups.ts` | Enable groups with position requirements | `npx tsx scripts/enable-course-groups.ts` |
+| `scripts/export-course-groups.ts` | Export groups to Excel for review | `npx tsx scripts/export-course-groups.ts` |
+
+### Current State
+- **59 course groups** in database
+- **All 59 enabled** for group matching
+- Groups are based on T-code prefix (T717, T697, etc.)
+- Only groups with 2+ courses were created
+
+### Important Notes
+
+1. **Exact match takes priority** - Group matching only used when no exact match exists
+2. **Latest expiration wins** - When matching via group, uses furthest-out expiration date
+3. **is_enabled flag** - Groups can be disabled individually if needed (rollback)
+4. **Not all similar courses should be grouped** - e.g., T506B (broad) vs T506B1 (subset) are intentionally separate
+
+### Rollback Plan
+If issues arise:
+```sql
+UPDATE course_groups SET is_enabled = false;
+```
+System reverts to exact ID matching only.
+
+---
+
+## 2025-12-02: CSV Training Import System
+
+### Overview
+Built a system to import/update training records from `course_compare.csv` to fill in missing expiration dates and add missing training records.
+
+### The Problem
+- Many training records in our database had `NULL` expiration dates
+- The external system (CSV) had the correct expiration dates
+- Some training records existed in CSV but not in our database at all
+
+### The Solution
+Created an import script with the following logic:
+1. **If we have a training record with NULL expiration** → Update with CSV's expiration date
+2. **If we already have an expiration date** → Leave it alone (don't override)
+3. **If we're missing the record entirely** → Import it from CSV
+
+### Script Created
+- **File**: `/scripts/import-csv-training.ts`
+- **Preview mode**: `npx tsx scripts/import-csv-training.ts --preview`
+- **Import mode**: `npx tsx scripts/import-csv-training.ts --import`
+
+### Import Results (2025-12-02)
+```
+Records UPDATED (added expiration to NULL): 1,835
+Records INSERTED (missing entirely): 55
+Skipped - already has expiration: 22,573
+Skipped - no expiration in CSV (n/a): 4,731
+Skipped - employee not found: 648
+```
+
+### How It Works
+
+1. **Parses CSV** - Handles BOM, quotes, line endings
+2. **Extracts course ID** - From requirement string like `...(13458)`
+3. **Parses expiration date** - Converts `MM/DD/YYYY` to `YYYY-MM-DD`, skips `n/a`
+4. **Bulk loads data** - Loads all employees, courses, and training records into memory
+5. **Processes each row** - Determines if update, insert, or skip
+6. **Applies changes** - Only in `--import` mode
+
+### CSV Format Expected
+```csv
+Requirement,Associate,Current Status,Expire Date
+SPPIVT T111 ESD...(13458),"Abbott,Michael C",Active,4/21/2026
+```
+
+### Key Design Decisions
+
+1. **Never override existing expiration dates** - Only fills in NULL values
+2. **For new inserts, completion date = expiration - 1 year** - Reasonable assumption
+3. **Notes field set to "Imported from course_compare.csv"** - For audit trail
+4. **Skips courses not in our database** - Won't create orphan records
+5. **Skips inactive employees** - Only processes active employees
+
+### Verification Example
+Before import - Abbott T717:
+```
+13512: completion 2023-01-25, expiration: NULL
+```
+
+After import:
+```
+13512: completion 2023-01-25, expiration: 2026-01-25
+```
+
+---
+
+## Documentation References
+
+- **Course Groups Proposal**: `/docs/COURSE_GROUPS_PROPOSAL.md`
+- **Course Compare Report**: `/docs/COURSE_COMPARE_REPORT.md`
+- **Export for Review**: `course-groups-review-2025-12-02.xlsx`
