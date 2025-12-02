@@ -94,6 +94,7 @@ export default function OrgTreePage() {
         expiring90Count: 0
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeader]);
 
   const fetchManagers = async () => {

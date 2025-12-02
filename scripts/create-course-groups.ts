@@ -44,7 +44,7 @@ async function createCourseGroups() {
 
   const groups: Record<string, { ids: string[], name: string }> = {};
 
-  courses.forEach((course: { course_id: string, course_name: string }) => {
+  courses.forEach((course: any) => {
     // Match T-codes like T717, T704A, T704B
     const match = course.course_name.match(/\b(T\d+[A-Z]?)\b/);
     if (match) {
