@@ -44,6 +44,24 @@ interface CourseComparePreviewRow {
   dbStatus: string;
 }
 
+interface StaticReport {
+  id: string;
+  title: string;
+  description: string;
+  filename: string;
+  generatedDate: string;
+}
+
+const staticReports: StaticReport[] = [
+  {
+    id: "course-compare-analysis",
+    title: "Course Compare Analysis Report",
+    description: "Pre-generated analysis comparing course_compare.csv against our database. Shows exact matches, group matches, and gaps with color-coded status.",
+    filename: "course-compare-report-2025-12-02.xlsx",
+    generatedDate: "2025-12-02"
+  }
+];
+
 const reports: Report[] = [
   {
     id: "supervisor-training-status",
@@ -350,6 +368,50 @@ export default function CustomReportsPage() {
             Download pre-configured training reports with color-coded status indicators
           </p>
         </div>
+
+        {/* Static Reports Section */}
+        {staticReports.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-white mb-4">Quick Downloads</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {staticReports.map((report) => (
+                <div
+                  key={report.id}
+                  className="bg-gray-800 rounded-lg border border-gray-700 p-4 hover:border-gray-600 transition-all flex items-center justify-between"
+                >
+                  <div className="flex-1">
+                    <h3 className="text-lg font-medium text-white">{report.title}</h3>
+                    <p className="text-sm text-gray-400 mt-1">{report.description}</p>
+                    <p className="text-xs text-gray-500 mt-2">Generated: {report.generatedDate}</p>
+                  </div>
+                  <a
+                    href={`/reports/${report.filename}`}
+                    download={report.filename}
+                    className="ml-4 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                    Download
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Reports Section */}
+        <h2 className="text-xl font-semibold text-white mb-4">Generate Reports</h2>
 
         {/* Reports Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

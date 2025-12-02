@@ -418,8 +418,161 @@ After import:
 
 ---
 
+## 2025-12-02: Course Compare Report & Missing Courses Import
+
+### Overview
+Created a report script that compares the external `course_compare.csv` against our database to verify which training records we have, which we're missing, and which are satisfied via course group matching.
+
+### The Problem
+Need a way to audit our database against the external system's training data to:
+1. Verify we have the same training records
+2. Identify gaps where we're missing records
+3. See where course group matching is working (equivalent courses)
+4. Flag any expiration date discrepancies
+
+### The Solution
+Created an Excel report generator that:
+1. Reads each row from `course_compare.csv`
+2. Checks if employee exists in our database
+3. Checks for exact course ID match
+4. If no exact match, checks for group match (equivalent course in same T-code group)
+5. Compares expiration dates (with 2-day tolerance for timezone issues)
+6. Outputs color-coded Excel file
+
+### Script Created
+- **File**: `/scripts/course-compare-report.ts`
+- **Run with**: `npx tsx scripts/course-compare-report.ts`
+- **Output**: `course-compare-report-YYYY-MM-DD.xlsx`
+
+### Match Statuses
+
+| Status | Color | Meaning |
+|--------|-------|---------|
+| Exact Match | Green | We have this exact course ID for this employee |
+| Group Match | Purple | We have an equivalent course from the same T-code group |
+| Not Found | Red | We don't have this course or any equivalent |
+| Employee Not Found | Yellow | Employee doesn't exist in our database |
+
+### Excel Output Structure
+
+**Sheet 1: Course Compare**
+- Original CSV columns: Requirement, Associate, Current Status, Expire Date
+- New columns:
+  - **Match Status**: One of the four statuses above
+  - **Match Details**: Additional info (e.g., "Has 14350 (T717)" for group matches, "Different Exp" for date mismatches)
+  - **DB Expiration**: Only populated if our expiration differs by more than 2 days
+
+**Sheet 2: Summary**
+- Quick stats showing counts for each match status
+
+### First Run Results (2025-12-02)
+```
+Total Records: 33,640
+  Exact Match: 29,988 (89%)
+  Group Match: 5
+  Not Found: 3,068
+  Employee Not Found: 579
+```
+
+### Key Design Decisions
+
+1. **2-day date tolerance** - Dates within 2 days are considered matching (handles timezone differences)
+2. **Group matching uses enabled groups only** - Respects the `is_enabled` flag on course_groups
+3. **Latest expiration used for group matches** - If employee has multiple courses in a group, uses the furthest-out expiration
+4. **Color-coded output** - Easy visual scanning of results
+
+### Use Cases
+
+1. **Audit after CSV import** - Verify import was successful
+2. **Identify missing training** - Find records in external system we don't have
+3. **Validate course groups** - See group matching in action
+4. **Spot-check expiration dates** - Find discrepancies between systems
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `scripts/course-compare-report.ts` | Report generator script |
+| `course-compare-report-2025-12-02.xlsx` | Output file (regenerated on each run) |
+
+---
+
+## 2025-12-02: Missing Courses Import
+
+### The Problem
+After running the course compare report, we discovered **3,068 "Not Found"** records. Investigation revealed:
+- **2,912** were because the course ID didn't exist in our `courses` table at all
+- The CSV had courses (like T717 Recertification - 14351) that we never imported
+- Even though we had T717 as a group, the specific course ID wasn't in our database, so group matching couldn't work
+
+### The Solution
+Created a script to:
+1. Find all courses in `course_compare.csv` that don't exist in our `courses` table
+2. Extract the T-code from the course name (e.g., "T717", "T684A")
+3. Add the courses to the `courses` table
+4. Add them to the appropriate T-code group (creating new groups if needed)
+
+### Script Created
+- **File**: `/scripts/add-missing-courses.ts`
+- **Preview mode**: `npx tsx scripts/add-missing-courses.ts --preview`
+- **Import mode**: `npx tsx scripts/add-missing-courses.ts --import`
+
+### Import Results
+```
+Courses added to courses table: 105
+New T-code groups created: 42
+Course-group memberships added: 82
+Courses without T-code (not grouped): 23
+```
+
+### Impact on Course Compare Report
+
+| Status | Before | After | Change |
+|--------|--------|-------|--------|
+| Exact Match | 29,988 | 29,988 | - |
+| Group Match | 5 | 1,408 | **+1,403** |
+| Not Found | 3,068 | 1,665 | **-1,403** |
+| Employee Not Found | 579 | 579 | - |
+
+**1,403 records** that were "Not Found" are now resolved via group matching!
+
+### Remaining "Not Found" Analysis
+
+The remaining 1,665 "Not Found" records are **legitimate gaps** - the CSV says the employee has the training, but our database doesn't have a record for them.
+
+**Top courses with missing records:**
+
+| Course ID | T-Code | Count | Description |
+|-----------|--------|-------|-------------|
+| 13535 | T142A | 106 | PMR Proficiency Assessment |
+| 13536 | T142C | 106 | Preliminary Review Board Training |
+| 10458 | N/A | 67 | EH&S Cardinal Rules Awareness |
+| 9962 | N/A | 67 | RTX Quality Cardinal Rules |
+| 13902 | T684A | 66 | Lock Wiring/Safety Wiring Installation |
+
+**Summary:**
+- Total "Not Found" records: 1,665
+- Unique courses: 169
+- Unique employees: 486
+
+These represent real discrepancies between the external system (CSV) and our database that may need to be imported or investigated.
+
+### Analysis Scripts Created
+
+| File | Purpose |
+|------|---------|
+| `scripts/add-missing-courses.ts` | Add missing courses and assign to groups |
+| `scripts/analyze-not-found.ts` | Basic breakdown of not found reasons |
+| `scripts/analyze-not-found-details.ts` | Detailed analysis by course, employee, T-code |
+
+### Worklog Reorganization
+- Moved `WORKLOG.md` from `/docs/` to `/docs/worklog/` folder for better organization
+
+---
+
 ## Documentation References
 
 - **Course Groups Proposal**: `/docs/COURSE_GROUPS_PROPOSAL.md`
 - **Course Compare Report**: `/docs/COURSE_COMPARE_REPORT.md`
 - **Export for Review**: `course-groups-review-2025-12-02.xlsx`
+- **Worklog**: Moved to `/docs/worklog/WORKLOG.md`
