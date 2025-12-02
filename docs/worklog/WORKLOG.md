@@ -520,8 +520,8 @@ Created a script to:
 ### Import Results
 ```
 Courses added to courses table: 105
-New T-code groups created: 42
-Course-group memberships added: 82
+New T-code groups created: 42 (total now: 102)
+Course-group memberships added: 82 (total now: 225)
 Courses without T-code (not grouped): 23
 ```
 
