@@ -243,7 +243,7 @@ async function generateReport() {
             const groupKey = `${employeeId}-${groupCourseId}`;
             if (trainingMap.has(groupKey)) {
               foundGroupMatch = true;
-              const exp = trainingMap.get(groupKey);
+              const exp = trainingMap.get(groupKey) ?? null;
               // Keep the one with latest expiration
               if (!matchedExpiration || (exp && exp > matchedExpiration)) {
                 matchedCourseId = groupCourseId;

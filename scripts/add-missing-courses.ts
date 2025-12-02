@@ -182,7 +182,7 @@ async function addMissingCourses(preview: boolean) {
           VALUES (${tCode}, ${tCode + ' Group'}, true)
           RETURNING group_id
         `;
-        groupId = result[0].group_id;
+        groupId = result[0].group_id as number;
         groupMap.set(tCode, groupId);
         groupsCreated++;
         console.log(`Created new group: ${tCode}`);
