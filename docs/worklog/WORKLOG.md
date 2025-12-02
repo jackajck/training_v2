@@ -570,6 +570,38 @@ These represent real discrepancies between the external system (CSV) and our dat
 
 ---
 
+## 2025-12-02: Custom Reports Page - Quick Downloads
+
+### Overview
+Added a "Quick Downloads" section to the Custom Reports page for pre-generated static reports.
+
+### Changes Made
+- **File**: `/app/custom-reports/page.tsx`
+  - Added `StaticReport` interface
+  - Added `staticReports` array for configurable static downloads
+  - Added "Quick Downloads" section above the dynamic reports
+  - Green download button links directly to static Excel files
+
+### File Locations
+- Static reports served from: `/public/reports/`
+- Report documentation: `/docs/course-compare-report/`
+
+### How to Add New Static Reports
+1. Generate the Excel file
+2. Copy to `/public/reports/`
+3. Add entry to `staticReports` array in `page.tsx`:
+```typescript
+{
+  id: "report-id",
+  title: "Report Title",
+  description: "Description here",
+  filename: "filename.xlsx",
+  generatedDate: "YYYY-MM-DD"
+}
+```
+
+---
+
 ## Documentation References
 
 - **Course Groups Proposal**: `/docs/COURSE_GROUPS_PROPOSAL.md`
