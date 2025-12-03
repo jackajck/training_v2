@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 
 interface Report {
   id: string;
@@ -30,19 +30,6 @@ interface SupervisorPreviewRow {
   expirationDate: string;
 }
 
-interface CourseComparePreviewRow {
-  requirement: string;
-  associate: string;
-  currentStatus: string;
-  expireDate: string;
-  employeeActive: string;
-  foundInDb: string;
-  courseMatch: string;
-  dbCourseName: string;
-  dbCompletionDate: string;
-  dbExpirationDate: string;
-  dbStatus: string;
-}
 
 interface StaticReport {
   id: string;
@@ -52,15 +39,7 @@ interface StaticReport {
   generatedDate: string;
 }
 
-const staticReports: StaticReport[] = [
-  {
-    id: "course-compare-analysis",
-    title: "Course Compare Analysis Report",
-    description: "Pre-generated analysis comparing course_compare.csv against our database. Shows exact matches, group matches, and gaps with color-coded status.",
-    filename: "course-compare-report-2025-12-02.xlsx",
-    generatedDate: "2025-12-02"
-  }
-];
+const staticReports: StaticReport[] = [];
 
 const reports: Report[] = [
   {
@@ -84,78 +63,33 @@ const reports: Report[] = [
     previewParamValue: "40081749"
   },
   {
-    id: "course-compare",
-    title: "Course Compare Report",
-    description: "Compares external training data (from course_compare.csv) against our database. Shows employee active status, course matching results, and training completion status from our system.",
+    id: "external-training-compare",
+    title: "External Training Compare",
+    description: "Compares all external training records against our database. Same logic as the CSV Compare page but for all employees. Shows exact matches, group matches, and gaps.",
     structure: [
-      "Columns 1-4: Original CSV data (Requirement, Associate, Status, Expire Date)",
-      "Blank separator column",
-      "Columns 6-12: Database lookup results (Employee Active, Found in DB, Course Match, DB Course Name, Completion/Expiration Dates, DB Status)",
-      "Summary sheet with statistics and list of employees not found"
+      "Employee Name & Active status",
+      "Course ID & Name from external data",
+      "Match Status (Exact, Group, Not Found, Not in DB)",
+      "Group Code & Matched Course (for group matches)",
+      "External & DB Expiration dates"
     ],
     colorScheme: [
-      { color: "Green", meaning: "Active employee / Course matched / Current training", bgClass: "bg-green-500" },
-      { color: "Orange", meaning: "Expired training / Course not matched", bgClass: "bg-orange-500" },
-      { color: "Red", meaning: "Inactive employee / Not found / Missing training", bgClass: "bg-red-500" },
-      { color: "Gray", meaning: "Employee not found in database", bgClass: "bg-gray-500" }
+      { color: "Green", meaning: "Exact match - course found in DB", bgClass: "bg-green-500" },
+      { color: "Purple", meaning: "Group match - equivalent course found", bgClass: "bg-purple-500" },
+      { color: "Orange", meaning: "Not Found - course exists but employee missing record", bgClass: "bg-orange-500" },
+      { color: "Red", meaning: "Course/Employee not in database", bgClass: "bg-red-500" }
     ],
-    endpoint: "/api/reports/course-compare",
-    previewEndpoint: "/api/reports/course-compare-preview",
-    previewParam: "name",
-    previewParamValue: "Abbott,Michael C"
+    endpoint: "/api/reports/external-training-gaps"
   }
 ];
 
 export default function CustomReportsPage() {
   const [loading, setLoading] = useState<string | null>(null);
-  const [previewData, setPreviewData] = useState<SupervisorPreviewRow[] | CourseComparePreviewRow[] | null>(null);
+  const [previewData, setPreviewData] = useState<SupervisorPreviewRow[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [activePreview, setActivePreview] = useState<string | null>(null);
   const [previewInfo, setPreviewInfo] = useState<{ title: string; subtitle: string } | null>(null);
 
-  // Course Compare specific state
-  const [csvNames, setCsvNames] = useState<string[]>([]);
-  const [namesLoading, setNamesLoading] = useState(false);
-  const [nameSearch, setNameSearch] = useState("");
-  const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [showNameDropdown, setShowNameDropdown] = useState(false);
-  const [certSearch, setCertSearch] = useState("");
-
-  // Load CSV names when component mounts
-  useEffect(() => {
-    const loadNames = async () => {
-      setNamesLoading(true);
-      try {
-        const response = await fetch('/api/reports/course-compare-names');
-        if (response.ok) {
-          const result = await response.json();
-          setCsvNames(result.names || []);
-        }
-      } catch (error) {
-        console.error('Failed to load names:', error);
-      } finally {
-        setNamesLoading(false);
-      }
-    };
-    loadNames();
-  }, []);
-
-  // Filter names based on search
-  const filteredNames = useMemo(() => {
-    if (!nameSearch.trim()) return csvNames.slice(0, 20);
-    const search = nameSearch.toLowerCase();
-    return csvNames.filter(name => name.toLowerCase().includes(search)).slice(0, 20);
-  }, [csvNames, nameSearch]);
-
-  // Filter preview data based on cert search
-  const filteredPreviewData = useMemo(() => {
-    if (!previewData || !certSearch.trim() || activePreview !== 'course-compare') return previewData;
-    const search = certSearch.toLowerCase();
-    return (previewData as CourseComparePreviewRow[]).filter(row =>
-      row.requirement.toLowerCase().includes(search) ||
-      row.dbCourseName.toLowerCase().includes(search)
-    );
-  }, [previewData, certSearch, activePreview]);
 
   const handleDownload = async (report: Report) => {
     try {
@@ -188,17 +122,14 @@ export default function CustomReportsPage() {
     }
   };
 
-  const handlePreview = async (report: Report, customName?: string) => {
+  const handlePreview = async (report: Report) => {
     if (!report.previewEndpoint) return;
 
     try {
       setPreviewLoading(true);
       setActivePreview(report.id);
-      setCertSearch("");
 
-      const paramValue = report.id === 'course-compare' && customName
-        ? customName
-        : report.previewParamValue || '';
+      const paramValue = report.previewParamValue || '';
 
       const url = report.previewParam
         ? `${report.previewEndpoint}?${report.previewParam}=${encodeURIComponent(paramValue)}`
@@ -213,18 +144,10 @@ export default function CustomReportsPage() {
       const result = await response.json();
       setPreviewData(result.data);
 
-      // Set preview info based on report type
-      if (report.id === 'course-compare') {
-        setPreviewInfo({
-          title: `Preview - ${paramValue}`,
-          subtitle: `Employee ${result.employeeFound ? 'found' : 'NOT found'} in database${result.badgeId ? ` (Badge: ${result.badgeId})` : ''}`
-        });
-      } else {
-        setPreviewInfo({
-          title: `Preview - Badge ID: ${paramValue}`,
-          subtitle: ''
-        });
-      }
+      setPreviewInfo({
+        title: `Preview - Badge ID: ${paramValue}`,
+        subtitle: ''
+      });
 
     } catch (error) {
       console.error('Error loading preview:', error);
@@ -234,22 +157,10 @@ export default function CustomReportsPage() {
     }
   };
 
-  const handleNameSelect = (name: string) => {
-    setSelectedName(name);
-    setNameSearch(name);
-    setShowNameDropdown(false);
-    // Auto-load preview for selected name
-    const courseCompareReport = reports.find(r => r.id === 'course-compare');
-    if (courseCompareReport) {
-      handlePreview(courseCompareReport, name);
-    }
-  };
-
   const closePreview = () => {
     setPreviewData(null);
     setActivePreview(null);
     setPreviewInfo(null);
-    setCertSearch("");
   };
 
   const getStatusColor = (status: string) => {
@@ -293,65 +204,6 @@ export default function CustomReportsPage() {
             </td>
             <td className="px-4 py-3 text-gray-300">{row.completionDate}</td>
             <td className="px-4 py-3 text-gray-300">{row.expirationDate}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-
-  const renderCourseComparePreview = (data: CourseComparePreviewRow[]) => (
-    <table className="w-full text-sm text-left">
-      <thead className="text-xs uppercase bg-gray-700 text-gray-300">
-        <tr>
-          <th className="px-3 py-3 border-r border-gray-600">Requirement (CSV)</th>
-          <th className="px-3 py-3 border-r border-gray-600">Associate</th>
-          <th className="px-3 py-3 border-r border-gray-600">CSV Status</th>
-          <th className="px-3 py-3 border-r-4 border-gray-500">CSV Expire</th>
-          <th className="px-3 py-3">Emp Active</th>
-          <th className="px-3 py-3">Found</th>
-          <th className="px-3 py-3">Course Match</th>
-          <th className="px-3 py-3">DB Course Name</th>
-          <th className="px-3 py-3">DB Completion</th>
-          <th className="px-3 py-3">DB Expiration</th>
-          <th className="px-3 py-3">DB Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((row, index) => (
-          <tr key={index} className="border-b border-gray-700 hover:bg-gray-750">
-            <td className="px-3 py-3 text-gray-300 max-w-xs truncate border-r border-gray-600" title={row.requirement}>
-              {row.requirement}
-            </td>
-            <td className="px-3 py-3 text-gray-300 border-r border-gray-600">{row.associate}</td>
-            <td className="px-3 py-3 text-gray-300 border-r border-gray-600">{row.currentStatus}</td>
-            <td className="px-3 py-3 text-gray-300 border-r-4 border-gray-500">{row.expireDate}</td>
-            <td className="px-3 py-3">
-              <span className={`${getStatusColor(row.employeeActive)} text-white px-2 py-1 rounded text-xs font-medium`}>
-                {row.employeeActive}
-              </span>
-            </td>
-            <td className="px-3 py-3">
-              <span className={`${getStatusColor(row.foundInDb)} text-white px-2 py-1 rounded text-xs font-medium`}>
-                {row.foundInDb}
-              </span>
-            </td>
-            <td className="px-3 py-3">
-              <span className={`${getStatusColor(row.courseMatch)} text-white px-2 py-1 rounded text-xs font-medium`}>
-                {row.courseMatch}
-              </span>
-            </td>
-            <td className="px-3 py-3 text-gray-300 max-w-xs truncate" title={row.dbCourseName}>
-              {row.dbCourseName}
-            </td>
-            <td className="px-3 py-3 text-gray-300">{row.dbCompletionDate}</td>
-            <td className="px-3 py-3 text-gray-300">{row.dbExpirationDate}</td>
-            <td className="px-3 py-3">
-              {row.dbStatus && (
-                <span className={`${getStatusColor(row.dbStatus)} text-white px-2 py-1 rounded text-xs font-medium`}>
-                  {row.dbStatus}
-                </span>
-              )}
-            </td>
           </tr>
         ))}
       </tbody>
@@ -463,56 +315,15 @@ export default function CustomReportsPage() {
                 </div>
               </div>
 
-              {/* Course Compare Name Search */}
-              {report.id === 'course-compare' && (
-                <div className="mb-4">
-                  <label className="text-sm font-semibold text-gray-400 mb-2 block">
-                    Search Employee for Preview:
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={nameSearch}
-                      onChange={(e) => {
-                        setNameSearch(e.target.value);
-                        setShowNameDropdown(true);
-                      }}
-                      onFocus={() => setShowNameDropdown(true)}
-                      placeholder={namesLoading ? "Loading names..." : "Type to search names..."}
-                      disabled={namesLoading}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-                    />
-                    {showNameDropdown && filteredNames.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredNames.map((name, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleNameSelect(name)}
-                            className="w-full px-3 py-2 text-left text-gray-300 hover:bg-gray-600 first:rounded-t-lg last:rounded-b-lg"
-                          >
-                            {name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {selectedName && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Selected: {selectedName}
-                    </p>
-                  )}
-                </div>
-              )}
-
               {/* Action Buttons */}
               <div className="flex gap-2">
                 {/* Preview Button */}
                 {report.previewEndpoint && (
                   <button
-                    onClick={() => handlePreview(report, report.id === 'course-compare' ? selectedName || undefined : undefined)}
+                    onClick={() => handlePreview(report)}
                     disabled={previewLoading && activePreview === report.id}
                     className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                    title={report.id === 'course-compare' ? `Preview for ${selectedName || report.previewParamValue}` : `Preview for ${report.previewParamValue}`}
+                    title={`Preview for ${report.previewParamValue}`}
                   >
                     {previewLoading && activePreview === report.id ? (
                       <>
@@ -617,8 +428,7 @@ export default function CustomReportsPage() {
                   <p className="text-sm text-gray-400 mt-1">{previewInfo.subtitle}</p>
                 )}
                 <p className="text-sm text-gray-400 mt-1">
-                  Showing {filteredPreviewData?.length || 0} of {previewData.length} row{previewData.length !== 1 ? 's' : ''}
-                  {certSearch && ` (filtered)`}
+                  Showing {previewData.length} row{previewData.length !== 1 ? 's' : ''}
                 </p>
               </div>
               <button
@@ -641,49 +451,8 @@ export default function CustomReportsPage() {
               </button>
             </div>
 
-            {/* Cert/Course Search for Course Compare */}
-            {activePreview === 'course-compare' && (
-              <div className="mb-4">
-                <div className="relative max-w-md">
-                  <svg
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                  <input
-                    type="text"
-                    value={certSearch}
-                    onChange={(e) => setCertSearch(e.target.value)}
-                    placeholder="Search certifications/courses..."
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-                  />
-                  {certSearch && (
-                    <button
-                      onClick={() => setCertSearch("")}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
             <div className="overflow-x-auto">
-              {activePreview === 'supervisor-training-status'
-                ? renderSupervisorPreview(filteredPreviewData as SupervisorPreviewRow[])
-                : renderCourseComparePreview((filteredPreviewData || []) as CourseComparePreviewRow[])
-              }
+              {renderSupervisorPreview(previewData as SupervisorPreviewRow[])}
             </div>
           </div>
         )}

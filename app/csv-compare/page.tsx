@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 interface MatchRecord {
   courseId: string | null;
@@ -15,6 +15,7 @@ interface MatchRecord {
   matchedCourseName?: string;
   inGroup?: boolean;
   reason?: string;
+  matchType?: "exact" | "group";
 }
 
 interface CompareResult {
@@ -54,17 +55,87 @@ export default function CSVComparePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"exact" | "group" | "notFound" | "notInDb">("exact");
+  const [activeTab, setActiveTab] = useState<"accounted" | "notFound" | "notInDb">("accounted");
 
-  const handleSearch = async () => {
-    if (!searchName.trim()) return;
+  // Autocomplete state
+  const [allNames, setAllNames] = useState<string[]>([]);
+  const [namesLoading, setNamesLoading] = useState(true);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Load all names on mount
+  useEffect(() => {
+    fetch('/api/reports/course-compare-names')
+      .then(res => res.json())
+      .then(data => {
+        setAllNames(data.names || []);
+        setNamesLoading(false);
+      })
+      .catch(() => setNamesLoading(false));
+  }, []);
+
+  // Filter names based on search input
+  const filteredNames = useMemo(() => {
+    if (!searchName.trim()) return [];
+    const search = searchName.toLowerCase();
+    return allNames
+      .filter(name => name.toLowerCase().startsWith(search))
+      .slice(0, 10);
+  }, [allNames, searchName]);
+
+  // Combine records for simplified view
+  const accountedFor = useMemo(() => {
+    if (!result?.records) return [];
+    const exact = result.records.exactMatches.map(r => ({ ...r, matchType: "exact" as const }));
+    const group = result.records.groupMatches.map(r => ({ ...r, matchType: "group" as const }));
+    return [...exact, ...group].sort((a, b) => a.courseName.localeCompare(b.courseName));
+  }, [result]);
+
+  // Not found = course exists in our DB but employee doesn't have training record
+  const notFoundRecords = useMemo(() => {
+    if (!result?.records) return [];
+    return [...result.records.notFound].sort((a, b) =>
+      a.courseName.localeCompare(b.courseName)
+    );
+  }, [result]);
+
+  // Course not in DB = course doesn't exist in our courses table at all
+  const courseNotInDbRecords = useMemo(() => {
+    if (!result?.records) return [];
+    return [...result.records.courseNotInDb].sort((a, b) =>
+      a.courseName.localeCompare(b.courseName)
+    );
+  }, [result]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSearch = async (nameToSearch?: string) => {
+    const name = nameToSearch || searchName;
+    if (!name.trim()) return;
+
+    setShowDropdown(false);
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const response = await fetch(`/api/csv-compare?name=${encodeURIComponent(searchName)}`);
+      const response = await fetch(`/api/csv-compare?name=${encodeURIComponent(name)}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -73,11 +144,54 @@ export default function CSVComparePage() {
       }
 
       setResult(data);
-      setActiveTab("exact");
+      setActiveTab("accounted");
     } catch {
       setError("Failed to connect to server");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleNameSelect = (name: string) => {
+    setSearchName(name);
+    setShowDropdown(false);
+    setHighlightedIndex(-1);
+    handleSearch(name);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown || filteredNames.length === 0) {
+      if (e.key === "Enter") {
+        handleSearch();
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setHighlightedIndex(prev =>
+          prev < filteredNames.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setHighlightedIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (highlightedIndex >= 0) {
+          handleNameSelect(filteredNames[highlightedIndex]);
+        } else if (filteredNames.length > 0) {
+          handleNameSelect(filteredNames[0]);
+        } else {
+          handleSearch();
+        }
+        break;
+      case "Escape":
+        setShowDropdown(false);
+        setHighlightedIndex(-1);
+        break;
     }
   };
 
@@ -86,11 +200,11 @@ export default function CSVComparePage() {
     setResult(null);
   };
 
-  const renderRecordTable = (records: MatchRecord[], type: "exact" | "group" | "notFound" | "notInDb") => {
+  const renderAccountedTable = (records: MatchRecord[]) => {
     if (records.length === 0) {
       return (
         <div className="text-center py-8 text-gray-400">
-          No records in this category
+          No records found
         </div>
       );
     }
@@ -101,86 +215,121 @@ export default function CSVComparePage() {
           <thead className="bg-gray-700 text-gray-300">
             <tr>
               <th className="px-3 py-2 text-left">Course ID</th>
-              <th className="px-3 py-2 text-left">T-Code</th>
               <th className="px-3 py-2 text-left">Course Name</th>
-              <th className="px-3 py-2 text-left">Required</th>
+              <th className="px-3 py-2 text-left">Match</th>
               <th className="px-3 py-2 text-left">CSV Status</th>
-              <th className="px-3 py-2 text-left">CSV Exp</th>
-              {type === "exact" && <th className="px-3 py-2 text-left">DB Exp</th>}
-              {type === "group" && (
-                <>
-                  <th className="px-3 py-2 text-left">Group</th>
-                  <th className="px-3 py-2 text-left">Matched Course</th>
-                  <th className="px-3 py-2 text-left">DB Exp</th>
-                </>
-              )}
-              {type === "notFound" && (
-                <>
-                  <th className="px-3 py-2 text-left">In Group</th>
-                  <th className="px-3 py-2 text-left">Reason</th>
-                </>
-              )}
+              <th className="px-3 py-2 text-left">CSV Expiration</th>
+              <th className="px-3 py-2 text-left">DB Expiration</th>
             </tr>
           </thead>
           <tbody>
             {records.map((record, idx) => (
               <tr key={idx} className="border-b border-gray-700 hover:bg-gray-750">
                 <td className="px-3 py-2 text-gray-300 font-mono">{record.courseId || "N/A"}</td>
-                <td className="px-3 py-2">
-                  {record.tCode ? (
-                    <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">
-                      {record.tCode}
-                    </span>
-                  ) : (
-                    <span className="text-gray-500">-</span>
+                <td className="px-3 py-2 text-gray-300 max-w-md" title={record.courseName}>
+                  <div className="truncate">{record.courseName}</div>
+                  {record.matchType === "group" && record.matchedCourseName && (
+                    <div className="text-xs text-purple-400 mt-1">
+                      Matched: {record.matchedCourseId}
+                    </div>
                   )}
                 </td>
-                <td className="px-3 py-2 text-gray-300 max-w-md truncate" title={record.courseName}>
-                  {record.courseName.substring(0, 60)}...
-                </td>
                 <td className="px-3 py-2">
-                  {record.isRequired ? (
-                    <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">Required</span>
+                  {record.matchType === "exact" ? (
+                    <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">Exact</span>
                   ) : (
-                    <span className="bg-gray-600 text-gray-300 px-2 py-0.5 rounded text-xs">Rogue</span>
+                    <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs" title={`Group: ${record.groupCode}`}>
+                      Group
+                    </span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-gray-400">{record.csvStatus}</td>
                 <td className="px-3 py-2 text-gray-400">{record.csvExpiration || "-"}</td>
-                {type === "exact" && (
-                  <td className="px-3 py-2 text-gray-400">{record.dbExpiration || "-"}</td>
-                )}
-                {type === "group" && (
-                  <>
-                    <td className="px-3 py-2">
-                      <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs">
-                        {record.groupCode}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-300 font-mono text-xs">
-                      {record.matchedCourseId}
-                    </td>
-                    <td className="px-3 py-2 text-gray-400">{record.dbExpiration || "-"}</td>
-                  </>
-                )}
-                {type === "notFound" && (
-                  <>
-                    <td className="px-3 py-2">
-                      {record.inGroup ? (
-                        <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs">
-                          {record.groupCode}
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">No</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-gray-400 text-xs">{record.reason}</td>
-                  </>
-                )}
+                <td className="px-3 py-2 text-gray-400">{record.dbExpiration || "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    );
+  };
+
+  const renderNotFoundTable = (records: MatchRecord[]) => {
+    if (records.length === 0) {
+      return (
+        <div className="text-center py-8 text-green-400">
+          No missing training records - all external courses are accounted for
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-700 text-gray-300">
+            <tr>
+              <th className="px-3 py-2 text-left">Course ID</th>
+              <th className="px-3 py-2 text-left">Course Name</th>
+              <th className="px-3 py-2 text-left">CSV Status</th>
+              <th className="px-3 py-2 text-left">CSV Expiration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((record, idx) => (
+              <tr key={idx} className="border-b border-gray-700 hover:bg-gray-750">
+                <td className="px-3 py-2 text-gray-300 font-mono">{record.courseId || "N/A"}</td>
+                <td className="px-3 py-2 text-gray-300 max-w-md truncate" title={record.courseName}>
+                  {record.courseName}
+                </td>
+                <td className="px-3 py-2 text-gray-400">{record.csvStatus}</td>
+                <td className="px-3 py-2 text-gray-400">{record.csvExpiration || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-xs text-gray-500 mt-3 px-3">
+          These courses exist in our database but this employee doesn&apos;t have a training record for them.
+        </p>
+      </div>
+    );
+  };
+
+  const renderNotInDbTable = (records: MatchRecord[]) => {
+    if (records.length === 0) {
+      return (
+        <div className="text-center py-8 text-green-400">
+          All external courses exist in our database
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-700 text-gray-300">
+            <tr>
+              <th className="px-3 py-2 text-left">Course ID</th>
+              <th className="px-3 py-2 text-left">Course Name</th>
+              <th className="px-3 py-2 text-left">CSV Status</th>
+              <th className="px-3 py-2 text-left">CSV Expiration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((record, idx) => (
+              <tr key={idx} className="border-b border-gray-700 hover:bg-gray-750">
+                <td className="px-3 py-2 text-gray-300 font-mono">{record.courseId || "N/A"}</td>
+                <td className="px-3 py-2 text-gray-300 max-w-md truncate" title={record.courseName}>
+                  {record.courseName}
+                </td>
+                <td className="px-3 py-2 text-gray-400">{record.csvStatus}</td>
+                <td className="px-3 py-2 text-gray-400">{record.csvExpiration || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-xs text-gray-500 mt-3 px-3">
+          These courses don&apos;t exist in our courses table. They may need to be added.
+        </p>
       </div>
     );
   };
@@ -190,25 +339,54 @@ export default function CSVComparePage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">CSV Compare</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">External Training Compare</h1>
           <p className="text-gray-400">
-            Compare an employee&apos;s training records from the external CSV against our database
+            Compare an employee&apos;s external training records against our database
           </p>
         </div>
 
         {/* Search */}
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
           <div className="flex gap-4">
-            <input
-              type="text"
-              value={searchName}
-              onChange={(e) => setSearchName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Enter employee name (e.g., Burke,John R)"
-              className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-            />
+            <div className="flex-1 relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={searchName}
+                onChange={(e) => {
+                  setSearchName(e.target.value);
+                  setShowDropdown(true);
+                  setHighlightedIndex(-1);
+                }}
+                onFocus={() => setShowDropdown(true)}
+                onKeyDown={handleKeyDown}
+                placeholder={namesLoading ? "Loading names..." : "Start typing last name..."}
+                disabled={namesLoading}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+              />
+
+              {/* Autocomplete Dropdown */}
+              {showDropdown && filteredNames.length > 0 && (
+                <div
+                  ref={dropdownRef}
+                  className="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                >
+                  {filteredNames.map((name, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleNameSelect(name)}
+                      className={`w-full px-4 py-2 text-left text-gray-300 hover:bg-gray-600 first:rounded-t-lg last:rounded-b-lg ${
+                        index === highlightedIndex ? 'bg-gray-600' : ''
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               disabled={loading || !searchName.trim()}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
             >
@@ -216,7 +394,10 @@ export default function CSVComparePage() {
             </button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Format: LastName,FirstName (e.g., &quot;Burke,John R&quot; or just &quot;Burke&quot;)
+            {namesLoading
+              ? "Loading employee names..."
+              : `${allNames.length} employees available - start typing to search by last name`
+            }
           </p>
         </div>
 
@@ -251,7 +432,7 @@ export default function CSVComparePage() {
           <div className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold text-yellow-300 mb-2">Employee Not in Database</h2>
             <p className="text-gray-300">
-              <strong>{result.csvName}</strong> was found in the CSV ({result.csvRecordCount} records)
+              <strong>{result.csvName}</strong> was found in the external data ({result.csvRecordCount} records)
               but does not exist in our database.
             </p>
           </div>
@@ -260,58 +441,44 @@ export default function CSVComparePage() {
         {/* Results */}
         {result && result.found && result.inDatabase && result.summary && result.records && (
           <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-                <p className="text-gray-400 text-sm">CSV Records</p>
-                <p className="text-2xl font-bold text-white">{result.summary.csvRecords}</p>
-              </div>
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-                <p className="text-gray-400 text-sm">DB Records</p>
-                <p className="text-2xl font-bold text-white">{result.summary.dbRecords}</p>
-              </div>
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-                <p className="text-gray-400 text-sm">Matched</p>
-                <p className="text-2xl font-bold text-green-400">{result.summary.totalMatched}</p>
-              </div>
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-                <p className="text-gray-400 text-sm">Not Found</p>
-                <p className="text-2xl font-bold text-red-400">{result.summary.notFound + result.summary.courseNotInDb}</p>
-              </div>
-            </div>
-
-            {/* Compliance Summary */}
+            {/* Employee Header */}
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-              <h2 className="text-xl font-semibold text-white mb-4">
-                {result.employee?.name}
-                {result.employee?.isActive ? (
-                  <span className="ml-2 text-xs bg-green-600 text-white px-2 py-0.5 rounded">Active</span>
-                ) : (
-                  <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">Inactive</span>
-                )}
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className={`p-4 rounded-lg ${result.summary.requiredMissing === 0 ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'}`}>
-                  <p className="text-sm text-gray-400">Required Courses</p>
-                  <p className={`text-xl font-bold ${result.summary.requiredMissing === 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {result.summary.requiredMatched} matched, {result.summary.requiredMissing} missing
-                  </p>
-                  {result.summary.requiredMissing === 0 ? (
-                    <p className="text-sm text-green-400 mt-1">✓ All position-required courses accounted for</p>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white">
+                  {result.employee?.name}
+                  {result.employee?.isActive ? (
+                    <span className="ml-2 text-xs bg-green-600 text-white px-2 py-0.5 rounded">Active</span>
                   ) : (
-                    <p className="text-sm text-red-400 mt-1">⚠ Missing courses required by positions</p>
+                    <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">Inactive</span>
                   )}
+                </h2>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-gray-700/50 rounded-lg p-4">
+                  <p className="text-gray-400 text-sm">External Records</p>
+                  <p className="text-2xl font-bold text-white">{result.summary.csvRecords}</p>
                 </div>
-                <div className="p-4 rounded-lg bg-gray-700/50 border border-gray-600">
-                  <p className="text-sm text-gray-400">Group Matches</p>
-                  <p className="text-xl font-bold text-purple-400">{result.summary.groupMatches}</p>
-                  <p className="text-sm text-gray-400 mt-1">Matched via T-code groups</p>
+                <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                  <p className="text-gray-400 text-sm">Accounted For</p>
+                  <p className="text-2xl font-bold text-green-400">{accountedFor.length}</p>
                 </div>
-                <div className="p-4 rounded-lg bg-gray-700/50 border border-gray-600">
-                  <p className="text-sm text-gray-400">Rogue Courses</p>
-                  <p className="text-xl font-bold text-gray-400">{result.summary.rogueCount}</p>
-                  <p className="text-sm text-gray-400 mt-1">Not required by any position</p>
+                <div className={`rounded-lg p-4 ${notFoundRecords.length > 0 ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-gray-700/50'}`}>
+                  <p className="text-gray-400 text-sm">Not Found</p>
+                  <p className={`text-2xl font-bold ${notFoundRecords.length > 0 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                    {notFoundRecords.length}
+                  </p>
+                </div>
+                <div className={`rounded-lg p-4 ${courseNotInDbRecords.length > 0 ? 'bg-red-900/30 border border-red-700' : 'bg-gray-700/50'}`}>
+                  <p className="text-gray-400 text-sm">Not in DB</p>
+                  <p className={`text-2xl font-bold ${courseNotInDbRecords.length > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                    {courseNotInDbRecords.length}
+                  </p>
+                </div>
+                <div className="bg-gray-700/50 rounded-lg p-4">
+                  <p className="text-gray-400 text-sm">Our DB Records</p>
+                  <p className="text-2xl font-bold text-white">{result.summary.dbRecords}</p>
                 </div>
               </div>
             </div>
@@ -320,52 +487,41 @@ export default function CSVComparePage() {
             <div className="bg-gray-800 rounded-lg border border-gray-700">
               <div className="border-b border-gray-700 flex">
                 <button
-                  onClick={() => setActiveTab("exact")}
-                  className={`px-4 py-3 font-medium text-sm ${
-                    activeTab === "exact"
-                      ? "text-green-400 border-b-2 border-green-400"
+                  onClick={() => setActiveTab("accounted")}
+                  className={`px-6 py-3 font-medium text-sm ${
+                    activeTab === "accounted"
+                      ? "text-green-400 border-b-2 border-green-400 bg-gray-750"
                       : "text-gray-400 hover:text-gray-200"
                   }`}
                 >
-                  Exact Matches ({result.summary.exactMatches})
-                </button>
-                <button
-                  onClick={() => setActiveTab("group")}
-                  className={`px-4 py-3 font-medium text-sm ${
-                    activeTab === "group"
-                      ? "text-purple-400 border-b-2 border-purple-400"
-                      : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  Group Matches ({result.summary.groupMatches})
+                  Accounted For ({accountedFor.length})
                 </button>
                 <button
                   onClick={() => setActiveTab("notFound")}
-                  className={`px-4 py-3 font-medium text-sm ${
+                  className={`px-6 py-3 font-medium text-sm ${
                     activeTab === "notFound"
-                      ? "text-red-400 border-b-2 border-red-400"
+                      ? "text-yellow-400 border-b-2 border-yellow-400 bg-gray-750"
                       : "text-gray-400 hover:text-gray-200"
                   }`}
                 >
-                  Not Found ({result.summary.notFound})
+                  Not Found ({notFoundRecords.length})
                 </button>
                 <button
                   onClick={() => setActiveTab("notInDb")}
-                  className={`px-4 py-3 font-medium text-sm ${
+                  className={`px-6 py-3 font-medium text-sm ${
                     activeTab === "notInDb"
-                      ? "text-yellow-400 border-b-2 border-yellow-400"
+                      ? "text-red-400 border-b-2 border-red-400 bg-gray-750"
                       : "text-gray-400 hover:text-gray-200"
                   }`}
                 >
-                  Course Not in DB ({result.summary.courseNotInDb})
+                  Course Not in DB ({courseNotInDbRecords.length})
                 </button>
               </div>
 
               <div className="p-4">
-                {activeTab === "exact" && renderRecordTable(result.records.exactMatches, "exact")}
-                {activeTab === "group" && renderRecordTable(result.records.groupMatches, "group")}
-                {activeTab === "notFound" && renderRecordTable(result.records.notFound, "notFound")}
-                {activeTab === "notInDb" && renderRecordTable(result.records.courseNotInDb, "notInDb")}
+                {activeTab === "accounted" && renderAccountedTable(accountedFor)}
+                {activeTab === "notFound" && renderNotFoundTable(notFoundRecords)}
+                {activeTab === "notInDb" && renderNotInDbTable(courseNotInDbRecords)}
               </div>
             </div>
           </>

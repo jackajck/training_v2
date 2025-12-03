@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface WorklogEntry {
   date: string;
@@ -10,20 +10,18 @@ interface WorklogEntry {
 }
 
 export default function WorklogPage() {
-  const worklogEntries: WorklogEntry[] = [
-    {
-      date: '2025-11-20',
-      title: 'Added Extend Certificate Feature',
-      description: 'Implemented the ability to extend certificate expiration dates for employees. Users can now extend certificates by a specified number of months with a required reason note. The extension feature is accessible from the employee training records view.',
-      type: 'feature'
-    },
-    {
-      date: '2025-11-20',
-      title: 'Fixed Expires Column Calculation',
-      description: 'Fixed the expires column in the employee training records to calculate expiration at the end of the day (23:59:59) instead of the start of the day (00:00:00). This ensures that certificates expiring today show "expires in X hours" rather than "X hours ago".',
-      type: 'fix'
-    }
-  ];
+  const [worklogEntries, setWorklogEntries] = useState<WorklogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/worklog')
+      .then(res => res.json())
+      .then(data => {
+        setWorklogEntries(data.entries || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -52,13 +50,26 @@ export default function WorklogPage() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
   };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">Worklog</h1>
+            <p className="text-gray-400">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8">

@@ -1,15 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { sql } from '@/lib/db';
-import { readFile } from 'fs/promises';
-import path from 'path';
-
-interface CSVRow {
-  requirement: string;
-  associate: string;
-  currentStatus: string;
-  expireDate: string;
-}
 
 interface EmployeeRecord {
   employee_name: string;
@@ -28,65 +19,10 @@ interface TrainingRecord {
   expiration_date: string | null;
 }
 
-// Extract course ID from CSV requirement string like "SPPIVT T111 ESD and FOD Training (OL)(13458)"
-function extractCourseId(requirement: string): string | null {
-  const match = requirement.match(/\((\d+)\)$/);
-  return match ? match[1] : null;
-}
-
 // Extract course code prefix like "SPPIVT T111" or "EHSBBPOCCWB"
 function extractCourseCode(requirement: string): string | null {
-  // Match patterns like "SPPIVT T111", "EHSBBPOCCWB", "RTXQUALCARDWB"
   const match = requirement.match(/^([A-Z]+(?:\s+T?\d+[A-Z]?)?)/i);
   return match ? match[1].trim() : null;
-}
-
-// Parse CSV content
-function parseCSV(content: string): CSVRow[] {
-  const rows: CSVRow[] = [];
-
-  // Remove BOM if present and normalize line endings
-  const cleanContent = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  const lines = cleanContent.split('\n');
-
-  // Skip header row
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    // Skip summary rows
-    if (line.includes('Overall Requirement Summary')) continue;
-
-    // Parse CSV with quoted fields
-    const fields: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        fields.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    fields.push(current.trim());
-
-    if (fields.length >= 4 && fields[0] && fields[1]) {
-      rows.push({
-        requirement: fields[0],
-        associate: fields[1].replace(/"/g, ''),
-        currentStatus: fields[2] || '',
-        expireDate: fields[3] || ''
-      });
-    }
-  }
-
-  return rows;
 }
 
 export async function GET(request: Request) {
@@ -106,15 +42,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const filterName = searchParams.get('name') || 'Abbott,Michael C';
 
-    // Read CSV file
-    const csvPath = path.join(process.cwd(), 'course_compare.csv');
-    const csvContent = await readFile(csvPath, 'utf-8');
-    const allCsvRows = parseCSV(csvContent);
-
-    // Filter to just the specified employee for preview
-    const csvRows = allCsvRows.filter(row =>
-      row.associate.toLowerCase() === filterName.toLowerCase()
-    );
+    // Get external training records from database for this employee
+    const externalRows = await sql`
+      SELECT associate_name, requirement, course_id, status, expire_date
+      FROM external_training
+      WHERE LOWER(associate_name) = LOWER(${filterName})
+      ORDER BY requirement
+    `;
 
     // Get employee from database
     const employees = await sql`
@@ -136,7 +70,6 @@ export async function GET(request: Request) {
     const courseByCodeMap = new Map<string, CourseRecord>();
     courses.forEach(course => {
       courseByIdMap.set(course.course_id, course);
-      // Also index by course code prefix
       const code = extractCourseCode(course.course_name);
       if (code) {
         courseByCodeMap.set(code.toLowerCase(), course);
@@ -164,20 +97,21 @@ export async function GET(request: Request) {
       }
     });
 
-    // Process each CSV row
-    const previewData = csvRows.map(csvRow => {
+    // Process each external row
+    type ExternalRow = { requirement: string; course_id: string | null; status: string; expire_date: string; associate_name: string };
+    const previewData = (externalRows as ExternalRow[]).map((row) => {
       // Look up course - try by ID first, then by course code
-      const csvCourseId = extractCourseId(csvRow.requirement);
-      const csvCourseCode = extractCourseCode(csvRow.requirement);
+      const extCourseId = row.course_id;
+      const extCourseCode = extractCourseCode(row.requirement);
 
       let matchedCourse: CourseRecord | undefined;
       let courseMatchType = 'No';
 
-      if (csvCourseId && courseByIdMap.has(csvCourseId)) {
-        matchedCourse = courseByIdMap.get(csvCourseId);
+      if (extCourseId && courseByIdMap.has(extCourseId)) {
+        matchedCourse = courseByIdMap.get(extCourseId);
         courseMatchType = 'Yes (ID)';
-      } else if (csvCourseCode && courseByCodeMap.has(csvCourseCode.toLowerCase())) {
-        matchedCourse = courseByCodeMap.get(csvCourseCode.toLowerCase());
+      } else if (extCourseCode && courseByCodeMap.has(extCourseCode.toLowerCase())) {
+        matchedCourse = courseByCodeMap.get(extCourseCode.toLowerCase());
         courseMatchType = 'Yes (Code)';
       }
 
@@ -210,10 +144,10 @@ export async function GET(request: Request) {
       }
 
       return {
-        requirement: csvRow.requirement,
-        associate: csvRow.associate,
-        currentStatus: csvRow.currentStatus,
-        expireDate: csvRow.expireDate,
+        requirement: row.requirement,
+        associate: row.associate_name,
+        currentStatus: row.status,
+        expireDate: row.expire_date,
         employeeActive: employee ? (employee.is_active ? 'Yes' : 'No') : 'Not Found',
         foundInDb: employee ? 'Yes' : 'No',
         courseMatch: courseMatchType,

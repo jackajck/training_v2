@@ -1,53 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import * as fs from 'fs';
-import * as path from 'path';
-
-interface CSVRow {
-  requirement: string;
-  associate: string;
-  status: string;
-  expireDate: string;
-  courseId: string | null;
-}
-
-function parseCSV(content: string): CSVRow[] {
-  if (content.charCodeAt(0) === 0xFEFF) {
-    content = content.slice(1);
-  }
-
-  const lines = content.split(/\r?\n/);
-  const rows: CSVRow[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const matches = line.match(/(?:^|,)("(?:[^"]*(?:""[^"]*)*)"|[^,]*)/g);
-    if (!matches || matches.length < 4) continue;
-
-    const fields = matches.map(m => {
-      let val = m.startsWith(',') ? m.slice(1) : m;
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.slice(1, -1).replace(/""/g, '"');
-      }
-      return val.trim();
-    });
-
-    const requirement = fields[0];
-    const idMatch = requirement.match(/\((\d+)\)\s*$/);
-
-    rows.push({
-      requirement,
-      associate: fields[1],
-      status: fields[2],
-      expireDate: fields[3],
-      courseId: idMatch ? idMatch[1] : null
-    });
-  }
-
-  return rows;
-}
 
 function extractTCode(courseName: string): string | null {
   const match = courseName.match(/\b(T\d+[A-Z]?)\b/i);
@@ -73,30 +25,39 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Read CSV
-    const csvPath = path.join(process.cwd(), 'course_compare.csv');
-    if (!fs.existsSync(csvPath)) {
-      return NextResponse.json({ error: 'CSV file not found' }, { status: 404 });
-    }
-
-    const content = fs.readFileSync(csvPath, 'utf-8');
-    const allRows = parseCSV(content);
-
-    // Filter for this employee
+    // Search external_training table for matching records
     const searchLower = employeeName.toLowerCase();
-    const employeeRows = allRows.filter(r => r.associate.toLowerCase().includes(searchLower));
 
-    if (employeeRows.length === 0) {
+    // Get matching records from external_training
+    const externalRows = await sql`
+      SELECT associate_name, requirement, course_id, status, expire_date
+      FROM external_training
+      WHERE LOWER(associate_name) LIKE ${`%${searchLower}%`}
+      ORDER BY associate_name, requirement
+    `;
+
+    if (externalRows.length === 0) {
+      // Get suggestions
+      const suggestions = await sql`
+        SELECT DISTINCT associate_name
+        FROM external_training
+        WHERE LOWER(associate_name) LIKE ${`%${searchLower.split(',')[0]}%`}
+        LIMIT 10
+      `;
+
       return NextResponse.json({
         found: false,
-        message: `No records found in CSV for "${employeeName}"`,
-        suggestions: [...new Set(allRows.map(r => r.associate))]
-          .filter(n => n.toLowerCase().includes(searchLower.split(',')[0]?.toLowerCase() || ''))
-          .slice(0, 10)
+        message: `No records found in external training data for "${employeeName}"`,
+        suggestions: (suggestions as { associate_name: string }[]).map(s => s.associate_name)
       });
     }
 
-    const exactName = employeeRows[0].associate;
+    const exactName = (externalRows[0] as { associate_name: string }).associate_name;
+
+    // Filter to only this exact associate
+    const employeeRows = (externalRows as { associate_name: string; requirement: string; course_id: string | null; status: string; expire_date: string }[]).filter(
+      r => r.associate_name.toLowerCase() === exactName.toLowerCase()
+    );
 
     // Find employee in our DB
     const dbEmployee = await sql`
@@ -111,11 +72,11 @@ export async function GET(request: NextRequest) {
         csvName: exactName,
         csvRecordCount: employeeRows.length,
         inDatabase: false,
-        message: 'Employee found in CSV but NOT in our database'
+        message: 'Employee found in external data but NOT in our database'
       });
     }
 
-    const employee = dbEmployee[0];
+    const employee = dbEmployee[0] as { employee_id: number; employee_name: string; is_active: boolean };
 
     // Get employee's training from our DB
     const dbTraining = await sql`
@@ -175,7 +136,7 @@ export async function GET(request: NextRequest) {
       courseSet.add(row.course_id);
     }
 
-    // Analyze each CSV row
+    // Analyze each external row
     interface MatchRecord {
       courseId: string | null;
       courseName: string;
@@ -196,44 +157,44 @@ export async function GET(request: NextRequest) {
     const notFound: MatchRecord[] = [];
     const courseNotInDb: MatchRecord[] = [];
 
-    for (const row of employeeRows) {
-      const tCode = extractTCode(row.requirement);
-      const isRequired = row.courseId ? requiredCourses.has(row.courseId) : false;
+    for (const r of employeeRows) {
+      const tCode = extractTCode(r.requirement);
+      const isRequired = r.course_id ? requiredCourses.has(r.course_id) : false;
 
-      if (!row.courseId) {
+      if (!r.course_id) {
         notFound.push({
           courseId: null,
-          courseName: row.requirement,
+          courseName: r.requirement,
           tCode,
-          csvStatus: row.status,
-          csvExpiration: row.expireDate,
+          csvStatus: r.status,
+          csvExpiration: r.expire_date,
           isRequired: false,
           reason: 'No course ID in requirement'
         });
         continue;
       }
 
-      if (!courseSet.has(row.courseId)) {
+      if (!courseSet.has(r.course_id)) {
         courseNotInDb.push({
-          courseId: row.courseId,
-          courseName: row.requirement,
+          courseId: r.course_id,
+          courseName: r.requirement,
           tCode,
-          csvStatus: row.status,
-          csvExpiration: row.expireDate,
+          csvStatus: r.status,
+          csvExpiration: r.expire_date,
           isRequired
         });
         continue;
       }
 
       // Check exact match
-      if (dbTrainingSet.has(row.courseId)) {
-        const dbInfo = dbTrainingMap.get(row.courseId);
+      if (dbTrainingSet.has(r.course_id)) {
+        const dbInfo = dbTrainingMap.get(r.course_id);
         exactMatches.push({
-          courseId: row.courseId,
-          courseName: row.requirement,
+          courseId: r.course_id,
+          courseName: r.requirement,
           tCode,
-          csvStatus: row.status,
-          csvExpiration: row.expireDate,
+          csvStatus: r.status,
+          csvExpiration: r.expire_date,
           dbExpiration: formatDate(dbInfo?.expiration || null),
           isRequired
         });
@@ -241,7 +202,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Check group match
-      const groupInfo = courseToGroup.get(row.courseId);
+      const groupInfo = courseToGroup.get(r.course_id);
       if (groupInfo) {
         const groupCourses = groupToCourses.get(groupInfo.groupId);
         if (groupCourses) {
@@ -257,11 +218,11 @@ export async function GET(request: NextRequest) {
           if (matchedCourse) {
             const dbInfo = dbTrainingMap.get(matchedCourse);
             groupMatches.push({
-              courseId: row.courseId,
-              courseName: row.requirement,
+              courseId: r.course_id,
+              courseName: r.requirement,
               tCode,
-              csvStatus: row.status,
-              csvExpiration: row.expireDate,
+              csvStatus: r.status,
+              csvExpiration: r.expire_date,
               groupCode: groupInfo.groupCode,
               matchedCourseId: matchedCourse,
               matchedCourseName,
@@ -275,11 +236,11 @@ export async function GET(request: NextRequest) {
 
       // Not found
       notFound.push({
-        courseId: row.courseId,
-        courseName: row.requirement,
+        courseId: r.course_id,
+        courseName: r.requirement,
         tCode,
-        csvStatus: row.status,
-        csvExpiration: row.expireDate,
+        csvStatus: r.status,
+        csvExpiration: r.expire_date,
         isRequired,
         inGroup: !!groupInfo,
         groupCode: groupInfo?.groupCode,

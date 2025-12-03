@@ -2,15 +2,6 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { sql } from '@/lib/db';
 import ExcelJS from 'exceljs';
-import { readFile } from 'fs/promises';
-import path from 'path';
-
-interface CSVRow {
-  requirement: string;
-  associate: string;
-  currentStatus: string;
-  expireDate: string;
-}
 
 interface EmployeeRecord {
   employee_name: string;
@@ -29,15 +20,8 @@ interface TrainingRecord {
   expiration_date: string | null;
 }
 
-// Extract course ID from CSV requirement string like "SPPIVT T111 ESD and FOD Training (OL)(13458)"
-function extractCourseId(requirement: string): string | null {
-  const match = requirement.match(/\((\d+)\)$/);
-  return match ? match[1] : null;
-}
-
 // Extract course code prefix like "SPPIVT T111" or "EHSBBPOCCWB"
 function extractCourseCode(requirement: string): string | null {
-  // Match patterns like "SPPIVT T111", "SPPIVT T704A", "EHSBBPOCCWB", "RTXQUALCARDWB"
   const match = requirement.match(/^([A-Z]+(?:\s+T?\d+[A-Z]?)?)/i);
   return match ? match[1].trim() : null;
 }
@@ -56,54 +40,6 @@ function normalizeCourseName(name: string): string {
     .trim();
 }
 
-// Parse CSV content
-function parseCSV(content: string): CSVRow[] {
-  const rows: CSVRow[] = [];
-
-  // Remove BOM if present and normalize line endings
-  const cleanContent = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  const lines = cleanContent.split('\n');
-
-  // Skip header row
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    // Skip summary rows
-    if (line.includes('Overall Requirement Summary')) continue;
-
-    // Parse CSV with quoted fields
-    const fields: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        fields.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    fields.push(current.trim());
-
-    if (fields.length >= 4 && fields[0] && fields[1]) {
-      rows.push({
-        requirement: fields[0],
-        associate: fields[1].replace(/"/g, ''),
-        currentStatus: fields[2] || '',
-        expireDate: fields[3] || ''
-      });
-    }
-  }
-
-  return rows;
-}
-
 export async function GET() {
   try {
     // Check authentication
@@ -117,10 +53,12 @@ export async function GET() {
       );
     }
 
-    // Read CSV file
-    const csvPath = path.join(process.cwd(), 'course_compare.csv');
-    const csvContent = await readFile(csvPath, 'utf-8');
-    const csvRows = parseCSV(csvContent);
+    // Get all external training records from database
+    const externalRows = await sql`
+      SELECT associate_name, requirement, course_id, status, expire_date
+      FROM external_training
+      ORDER BY associate_name, requirement
+    `;
 
     // Get all employees from database
     const employees = await sql`
@@ -147,7 +85,6 @@ export async function GET() {
     courses.forEach(course => {
       courseByIdMap.set(course.course_id, course);
       courseByNameMap.set(normalizeCourseName(course.course_name), course);
-      // Also index by course code prefix
       const code = extractCourseCode(course.course_name);
       if (code) {
         courseByCodeMap.set(code.toLowerCase(), course);
@@ -174,7 +111,6 @@ export async function GET() {
     trainingRecords.forEach((tr) => {
       const key = `${tr.employee_name.toLowerCase()}|${tr.course_id}`;
       const existing = trainingMap.get(key);
-      // Keep the most recent completion
       if (!existing || (tr.completion_date && (!existing.completion_date || tr.completion_date > existing.completion_date))) {
         trainingMap.set(key, {
           course_id: tr.course_id,
@@ -253,10 +189,11 @@ export async function GET() {
     const activeEmployees = new Set<string>();
     const inactiveEmployees = new Set<string>();
 
-    // Process each CSV row
-    for (const csvRow of csvRows) {
+    // Process each external row
+    for (const extRow of externalRows) {
+      const row = extRow as { associate_name: string; requirement: string; course_id: string | null; status: string; expire_date: string };
       totalRows++;
-      const associateLower = csvRow.associate.toLowerCase();
+      const associateLower = row.associate_name.toLowerCase();
       uniqueEmployees.add(associateLower);
 
       // Look up employee
@@ -272,31 +209,29 @@ export async function GET() {
           inactiveEmployees.add(associateLower);
         }
       } else {
-        notFoundEmployees.add(csvRow.associate);
+        notFoundEmployees.add(row.associate_name);
       }
 
       // Look up course - try by ID first, then by code prefix, then by full name
-      const csvCourseId = extractCourseId(csvRow.requirement);
-      const csvCourseCode = extractCourseCode(csvRow.requirement);
-      const csvCourseName = extractCourseName(csvRow.requirement);
+      const extCourseId = row.course_id;
+      const extCourseCode = extractCourseCode(row.requirement);
+      const extCourseName = extractCourseName(row.requirement);
 
       let matchedCourse: CourseRecord | undefined;
       let courseMatchType = 'No';
 
-      if (csvCourseId && courseByIdMap.has(csvCourseId)) {
-        matchedCourse = courseByIdMap.get(csvCourseId);
+      if (extCourseId && courseByIdMap.has(extCourseId)) {
+        matchedCourse = courseByIdMap.get(extCourseId);
         courseMatchType = 'Yes (ID)';
         coursesMatched++;
-      } else if (csvCourseCode && courseByCodeMap.has(csvCourseCode.toLowerCase())) {
-        // Try course code prefix match (e.g., "SPPIVT T111")
-        matchedCourse = courseByCodeMap.get(csvCourseCode.toLowerCase());
+      } else if (extCourseCode && courseByCodeMap.has(extCourseCode.toLowerCase())) {
+        matchedCourse = courseByCodeMap.get(extCourseCode.toLowerCase());
         courseMatchType = 'Yes (Code)';
         coursesMatched++;
       } else {
-        // Try fuzzy name match
-        const normalizedCsvName = normalizeCourseName(csvCourseName);
-        if (courseByNameMap.has(normalizedCsvName)) {
-          matchedCourse = courseByNameMap.get(normalizedCsvName);
+        const normalizedExtName = normalizeCourseName(extCourseName);
+        if (courseByNameMap.has(normalizedExtName)) {
+          matchedCourse = courseByNameMap.get(normalizedExtName);
           courseMatchType = 'Yes (Name)';
           coursesMatched++;
         } else {
@@ -338,11 +273,11 @@ export async function GET() {
       }
 
       // Add data row
-      const row = worksheet.addRow([
-        csvRow.requirement,
-        csvRow.associate,
-        csvRow.currentStatus,
-        csvRow.expireDate,
+      const dataRow = worksheet.addRow([
+        row.requirement,
+        row.associate_name,
+        row.status,
+        row.expire_date,
         '', // Blank separator
         employeeActive,
         foundInDb,
@@ -354,14 +289,14 @@ export async function GET() {
       ]);
 
       // Style the separator column
-      row.getCell(5).fill = {
+      dataRow.getCell(5).fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: colors.lightGray }
       };
 
       // Color code Employee Active column
-      const activeCell = row.getCell(6);
+      const activeCell = dataRow.getCell(6);
       if (employeeActive === 'Yes') {
         activeCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
         activeCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -374,7 +309,7 @@ export async function GET() {
       }
 
       // Color code Found in DB column
-      const foundCell = row.getCell(7);
+      const foundCell = dataRow.getCell(7);
       if (foundInDb === 'Yes') {
         foundCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
         foundCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -384,7 +319,7 @@ export async function GET() {
       }
 
       // Color code Course Match column
-      const matchCell = row.getCell(8);
+      const matchCell = dataRow.getCell(8);
       if (courseMatchType.startsWith('Yes')) {
         matchCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
         matchCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -394,7 +329,7 @@ export async function GET() {
       }
 
       // Color code DB Status column
-      const statusCell = row.getCell(12);
+      const statusCell = dataRow.getCell(12);
       if (dbStatus === 'Current') {
         statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.green } };
         statusCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -408,7 +343,7 @@ export async function GET() {
 
       // Center alignment for status columns
       [6, 7, 8, 12].forEach(col => {
-        row.getCell(col).alignment = { horizontal: 'center', vertical: 'middle' };
+        dataRow.getCell(col).alignment = { horizontal: 'center', vertical: 'middle' };
       });
     }
 
@@ -434,7 +369,7 @@ export async function GET() {
     ];
 
     // Title
-    const titleRow = summarySheet.addRow(['Course Comparison Summary Report']);
+    const titleRow = summarySheet.addRow(['External Training Comparison Summary']);
     titleRow.font = { bold: true, size: 16 };
     summarySheet.mergeCells('A1:C1');
 
@@ -446,8 +381,8 @@ export async function GET() {
     statsHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     statsHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.header } };
 
-    summarySheet.addRow(['Total Rows in CSV', totalRows, '']);
-    summarySheet.addRow(['Unique Employees in CSV', uniqueEmployees.size, '']);
+    summarySheet.addRow(['Total Records', totalRows, '']);
+    summarySheet.addRow(['Unique Employees', uniqueEmployees.size, '']);
     summarySheet.addRow([]);
 
     // Employee Stats
@@ -528,7 +463,7 @@ export async function GET() {
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="course-compare-${new Date().toISOString().split('T')[0]}.xlsx"`
+        'Content-Disposition': `attachment; filename="external-training-compare-${new Date().toISOString().split('T')[0]}.xlsx"`
       }
     });
 

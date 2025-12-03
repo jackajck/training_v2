@@ -1,57 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { readFile } from 'fs/promises';
-import path from 'path';
-
-// Parse CSV and extract unique names
-function parseCSVForNames(content: string): string[] {
-  const names = new Set<string>();
-
-  // Remove BOM if present and normalize line endings
-  const cleanContent = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  const lines = cleanContent.split('\n');
-
-  // Skip header row
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    // Skip summary rows
-    if (line.includes('Overall Requirement Summary')) continue;
-
-    // Parse CSV with quoted fields - extract just the name (second field)
-    let current = '';
-    let inQuotes = false;
-    let fieldIndex = 0;
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        if (fieldIndex === 1) {
-          // This is the Associate field
-          const name = current.trim().replace(/"/g, '');
-          if (name) names.add(name);
-          break;
-        }
-        fieldIndex++;
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-
-    // Handle case where name is last field we reach
-    if (fieldIndex === 1) {
-      const name = current.trim().replace(/"/g, '');
-      if (name) names.add(name);
-    }
-  }
-
-  return Array.from(names).sort();
-}
+import { sql } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -66,10 +15,14 @@ export async function GET() {
       );
     }
 
-    // Read CSV file
-    const csvPath = path.join(process.cwd(), 'course_compare.csv');
-    const csvContent = await readFile(csvPath, 'utf-8');
-    const names = parseCSVForNames(csvContent);
+    // Get unique names from external_training table
+    const result = await sql`
+      SELECT DISTINCT associate_name
+      FROM external_training
+      ORDER BY associate_name
+    `;
+
+    const names = (result as { associate_name: string }[]).map(r => r.associate_name);
 
     return NextResponse.json({
       success: true,
