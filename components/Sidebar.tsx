@@ -165,7 +165,7 @@ export default function Sidebar() {
     { href: "/new-course", label: "New Course", icon: <PlusIcon /> },
     { type: "divider" },
     { href: "/org-tree", label: "ORG Tree", icon: <OrgTreeIcon /> },
-    { href: "/raw-user", label: "RAW user", icon: <DatabaseIcon /> },
+    { href: "/csv-compare", label: "CSV Compare", icon: <DatabaseIcon /> },
     { href: "/employee-view", label: "Employee View", icon: <UserIcon />, disabled: true },
     { type: "divider" },
     { href: "/custom-reports", label: "Custom Reports", icon: <DocumentIcon /> },
