@@ -143,7 +143,61 @@ This will create a new `course-compare-report-YYYY-MM-DD.xlsx` file in the curre
 | `scripts/course-compare-report.ts` | Generate the Excel report |
 | `scripts/analyze-not-found.ts` | Basic analysis of "Not Found" cases |
 | `scripts/analyze-not-found-details.ts` | Detailed breakdown by course/employee/T-code |
+| `scripts/analyze-not-found-groups.ts` | Analyze group coverage and position requirements |
 | `scripts/add-missing-courses.ts` | Add missing courses to database and groups |
+
+---
+
+## Deep Dive: Do "Not Found" Courses Actually Matter?
+
+We analyzed the 1,665 "Not Found" records to answer two questions:
+1. Do these courses have alternative IDs in the same T-code group?
+2. Are these courses even required by any positions in our database?
+
+### Key Finding: 93% Are "Rogue" Courses
+
+| Category | Records | Percentage |
+|----------|---------|------------|
+| **Required by a position** | 120 | 7% |
+| **NOT required by any position (rogue)** | 1,545 | 93% |
+
+**Only 120 records (7%) are for courses that positions actually require.** The other 1,545 are "rogue" - they exist in the external system but aren't tied to any job requirements in our database.
+
+### By Group Membership
+
+| Category | Records | Percentage |
+|----------|---------|------------|
+| In a T-code group | 1,309 | 79% |
+| NOT in any group | 356 | 21% |
+
+Most "Not Found" courses (79%) are in a T-code group, but the employees don't have ANY course from that group - not the specific one, and not any alternative.
+
+### Why Group Matching Didn't Help
+
+For most of these courses, one of two things is true:
+
+1. **Single-course groups**: Groups like T142A, T142C, T610A, T673B only have 1 course in them. There are no alternatives to match against.
+
+2. **No training at all**: For groups with multiple courses (like T684A with 6 courses, T692C with 6 courses), the employees have **zero** courses from that group. They simply haven't completed any version of the training.
+
+### Courses Not in Any Group (356 records)
+
+These courses don't have a T-code prefix we could use for grouping:
+
+| Course ID | Count | Description |
+|-----------|-------|-------------|
+| 10458 | 67 | EH&S Cardinal Rules Awareness |
+| 9962 | 67 | RTX Quality Cardinal Rules |
+| 15111 | 26 | FAA Reasonable Suspicion for Supervisors |
+| 14242 | 15 | QOP 485 Mechanical Assembly |
+
+### Bottom Line
+
+**For compliance tracking purposes, most of these "Not Found" records don't matter** because:
+- 93% are for courses no position requires
+- The employees genuinely don't have ANY version of the remaining courses
+
+The 120 records that DO matter (position-required courses) may need investigation or import.
 
 ---
 
@@ -151,7 +205,8 @@ This will create a new `course-compare-report-YYYY-MM-DD.xlsx` file in the curre
 
 The 1,665 "Not Found" records represent real gaps. Options:
 
-1. **Import missing training** - Create a script to import these records from the CSV
-2. **Investigate specific courses** - Some may be old/deprecated training that doesn't need importing
-3. **Review by employee** - Prioritize employees with the most missing records (e.g., Chen, Rui with 29 missing)
-4. **Accept the gap** - If these aren't critical courses for compliance tracking
+1. **Focus on the 120 that matter** - Only 7% are required by positions; prioritize these
+2. **Import missing training** - Create a script to import these records from the CSV
+3. **Investigate specific courses** - Some may be old/deprecated training that doesn't need importing
+4. **Review by employee** - Prioritize employees with the most missing records (e.g., Chen, Rui with 29 missing)
+5. **Accept the gap** - The 93% "rogue" courses can likely be ignored for compliance purposes
