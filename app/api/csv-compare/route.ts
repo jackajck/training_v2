@@ -136,6 +136,14 @@ export async function GET(request: NextRequest) {
       courseSet.add(row.course_id);
     }
 
+    // Load merged courses lookup table
+    const mergedCourses = await sql`SELECT old_course_id, new_course_id, course_name FROM merged_courses`;
+    const mergedMap = new Map<string, { newId: string; name: string }>();
+    for (const mc of mergedCourses) {
+      const row = mc as { old_course_id: string; new_course_id: string; course_name: string };
+      mergedMap.set(row.old_course_id, { newId: row.new_course_id, name: row.course_name });
+    }
+
     // Analyze each external row
     interface MatchRecord {
       courseId: string | null;
@@ -150,12 +158,14 @@ export async function GET(request: NextRequest) {
       matchedCourseName?: string | null;
       inGroup?: boolean;
       reason?: string;
+      mergedToId?: string;
     }
 
     const exactMatches: MatchRecord[] = [];
     const groupMatches: MatchRecord[] = [];
     const notFound: MatchRecord[] = [];
     const courseNotInDb: MatchRecord[] = [];
+    const mergedCourseRecords: MatchRecord[] = [];
 
     for (const r of employeeRows) {
       const tCode = extractTCode(r.requirement);
@@ -175,6 +185,21 @@ export async function GET(request: NextRequest) {
       }
 
       if (!courseSet.has(r.course_id)) {
+        // Check if this course was merged into another
+        const mergedInfo = mergedMap.get(r.course_id);
+        if (mergedInfo) {
+          mergedCourseRecords.push({
+            courseId: r.course_id,
+            courseName: r.requirement,
+            tCode,
+            csvStatus: r.status,
+            csvExpiration: r.expire_date,
+            isRequired,
+            mergedToId: mergedInfo.newId,
+            reason: `Merged into ID ${mergedInfo.newId}`
+          });
+          continue;
+        }
         courseNotInDb.push({
           courseId: r.course_id,
           courseName: r.requirement,
@@ -270,6 +295,7 @@ export async function GET(request: NextRequest) {
         groupMatches: groupMatches.length,
         notFound: notFound.length,
         courseNotInDb: courseNotInDb.length,
+        mergedCourses: mergedCourseRecords.length,
         totalMatched: exactMatches.length + groupMatches.length,
         requiredMatched: totalRequired,
         requiredMissing: missingRequired,
@@ -279,7 +305,8 @@ export async function GET(request: NextRequest) {
         exactMatches,
         groupMatches,
         notFound,
-        courseNotInDb
+        courseNotInDb,
+        mergedCourses: mergedCourseRecords
       }
     });
 

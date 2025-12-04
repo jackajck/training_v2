@@ -16,6 +16,7 @@ interface MatchRecord {
   inGroup?: boolean;
   reason?: string;
   matchType?: "exact" | "group";
+  mergedToId?: string;
 }
 
 interface CompareResult {
@@ -37,6 +38,7 @@ interface CompareResult {
     groupMatches: number;
     notFound: number;
     courseNotInDb: number;
+    mergedCourses: number;
     totalMatched: number;
     requiredMatched: number;
     requiredMissing: number;
@@ -47,6 +49,7 @@ interface CompareResult {
     groupMatches: MatchRecord[];
     notFound: MatchRecord[];
     courseNotInDb: MatchRecord[];
+    mergedCourses: MatchRecord[];
   };
 }
 
@@ -55,7 +58,7 @@ export default function CSVComparePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"accounted" | "notFound" | "notInDb">("accounted");
+  const [activeTab, setActiveTab] = useState<"accounted" | "notFound" | "notInDb" | "merged">("accounted");
 
   // Autocomplete state
   const [allNames, setAllNames] = useState<string[]>([]);
@@ -105,6 +108,14 @@ export default function CSVComparePage() {
   const courseNotInDbRecords = useMemo(() => {
     if (!result?.records) return [];
     return [...result.records.courseNotInDb].sort((a, b) =>
+      a.courseName.localeCompare(b.courseName)
+    );
+  }, [result]);
+
+  // Merged courses = course ID was merged into another ID
+  const mergedCourseRecords = useMemo(() => {
+    if (!result?.records?.mergedCourses) return [];
+    return [...result.records.mergedCourses].sort((a, b) =>
       a.courseName.localeCompare(b.courseName)
     );
   }, [result]);
@@ -334,6 +345,52 @@ export default function CSVComparePage() {
     );
   };
 
+  const renderMergedTable = (records: MatchRecord[]) => {
+    if (records.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-400">
+          No merged courses
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-700 text-gray-300">
+            <tr>
+              <th className="px-3 py-2 text-left">Old Course ID</th>
+              <th className="px-3 py-2 text-left">Course Name</th>
+              <th className="px-3 py-2 text-left">Merged To</th>
+              <th className="px-3 py-2 text-left">CSV Status</th>
+              <th className="px-3 py-2 text-left">CSV Expiration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((record, idx) => (
+              <tr key={idx} className="border-b border-gray-700 hover:bg-gray-750">
+                <td className="px-3 py-2 text-gray-500 font-mono line-through">{record.courseId || "N/A"}</td>
+                <td className="px-3 py-2 text-gray-300 max-w-md truncate" title={record.courseName}>
+                  {record.courseName}
+                </td>
+                <td className="px-3 py-2">
+                  <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-mono">
+                    {record.mergedToId}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-gray-400">{record.csvStatus}</td>
+                <td className="px-3 py-2 text-gray-400">{record.csvExpiration || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-xs text-gray-500 mt-3 px-3">
+          These course IDs were merged into different IDs. The course still exists under the new ID shown above.
+        </p>
+      </div>
+    );
+  };
+
   return (
     <div className="h-[calc(100vh-80px)] overflow-y-auto p-8">
       <div className="max-w-7xl mx-auto">
@@ -516,12 +573,25 @@ export default function CSVComparePage() {
                 >
                   Course Not in DB ({courseNotInDbRecords.length})
                 </button>
+                {mergedCourseRecords.length > 0 && (
+                  <button
+                    onClick={() => setActiveTab("merged")}
+                    className={`px-6 py-3 font-medium text-sm ${
+                      activeTab === "merged"
+                        ? "text-blue-400 border-b-2 border-blue-400 bg-gray-750"
+                        : "text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    Merged IDs ({mergedCourseRecords.length})
+                  </button>
+                )}
               </div>
 
               <div className="p-4">
                 {activeTab === "accounted" && renderAccountedTable(accountedFor)}
                 {activeTab === "notFound" && renderNotFoundTable(notFoundRecords)}
                 {activeTab === "notInDb" && renderNotInDbTable(courseNotInDbRecords)}
+                {activeTab === "merged" && renderMergedTable(mergedCourseRecords)}
               </div>
             </div>
           </>
