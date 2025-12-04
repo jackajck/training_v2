@@ -223,11 +223,47 @@ export default function CSVComparePage() {
       );
     }
 
+    // Sort records to group T-code matches together by their matched course ID
+    const sortedRecords = [...records].sort((a, b) => {
+      // T-code matches sort by their matchedCourseId to group them
+      const aKey = a.matchType === "tcode" ? `tcode_${a.matchedCourseId}_${a.courseId}` : `other_${a.courseName}`;
+      const bKey = b.matchType === "tcode" ? `tcode_${b.matchedCourseId}_${b.courseId}` : `other_${b.courseName}`;
+      return aKey.localeCompare(bKey);
+    });
+
+    // Build grouping info for T-code matches
+    const tCodeGroups = new Map<string, number[]>();
+    sortedRecords.forEach((record, idx) => {
+      if (record.matchType === "tcode" && record.matchedCourseId) {
+        const key = record.matchedCourseId;
+        if (!tCodeGroups.has(key)) {
+          tCodeGroups.set(key, []);
+        }
+        tCodeGroups.get(key)!.push(idx);
+      }
+    });
+
+    // Helper to determine position in group
+    const getGroupPosition = (idx: number): { isInGroup: boolean; isFirst: boolean; isLast: boolean; isMiddle: boolean } => {
+      for (const indices of tCodeGroups.values()) {
+        if (indices.includes(idx) && indices.length > 1) {
+          return {
+            isInGroup: true,
+            isFirst: indices[0] === idx,
+            isLast: indices[indices.length - 1] === idx,
+            isMiddle: indices[0] !== idx && indices[indices.length - 1] !== idx
+          };
+        }
+      }
+      return { isInGroup: false, isFirst: false, isLast: false, isMiddle: false };
+    };
+
     return (
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-700 text-gray-300">
             <tr>
+              <th className="w-4"></th>
               <th className="px-3 py-2 text-left">Course ID</th>
               <th className="px-3 py-2 text-left">Course Name</th>
               <th className="px-3 py-2 text-left">Match</th>
@@ -237,40 +273,61 @@ export default function CSVComparePage() {
             </tr>
           </thead>
           <tbody>
-            {records.map((record, idx) => (
-              <tr key={idx} className="border-b border-gray-700 hover:bg-gray-750">
-                <td className="px-3 py-2 text-gray-300 font-mono">{record.courseId || "N/A"}</td>
-                <td className="px-3 py-2 text-gray-300 max-w-md" title={record.courseName}>
-                  <div className="truncate">{record.courseName}</div>
-                  {record.matchType === "group" && record.matchedCourseName && (
-                    <div className="text-xs text-purple-400 mt-1">
-                      Matched: {record.matchedCourseId}
-                    </div>
-                  )}
-                  {record.matchType === "tcode" && record.matchedCourseId && (
-                    <div className="text-xs text-cyan-400 mt-1">
-                      T-Code: {record.tCode} → ID {record.matchedCourseId}
-                    </div>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {record.matchType === "exact" ? (
-                    <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">Exact</span>
-                  ) : record.matchType === "group" ? (
-                    <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs" title={`Group: ${record.groupCode}`}>
-                      Group
-                    </span>
-                  ) : (
-                    <span className="bg-cyan-600 text-white px-2 py-0.5 rounded text-xs" title={record.reason}>
-                      T-Code
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-gray-400">{record.csvStatus}</td>
-                <td className="px-3 py-2 text-gray-400">{record.csvExpiration || "-"}</td>
-                <td className="px-3 py-2 text-gray-400">{record.dbExpiration || "-"}</td>
-              </tr>
-            ))}
+            {sortedRecords.map((record, idx) => {
+              const groupPos = getGroupPosition(idx);
+              return (
+                <tr key={idx} className={`border-b border-gray-700 hover:bg-gray-750 ${groupPos.isInGroup ? 'bg-cyan-900/10' : ''}`}>
+                  <td className="relative w-4">
+                    {groupPos.isInGroup && (
+                      <div className="absolute left-2 top-0 bottom-0 flex flex-col items-center">
+                        {/* Top connector */}
+                        {!groupPos.isFirst && (
+                          <div className="w-0.5 bg-cyan-500 flex-1" />
+                        )}
+                        {groupPos.isFirst && <div className="flex-1" />}
+                        {/* Dot */}
+                        <div className="w-2 h-2 rounded-full bg-cyan-500 flex-shrink-0" />
+                        {/* Bottom connector */}
+                        {!groupPos.isLast && (
+                          <div className="w-0.5 bg-cyan-500 flex-1" />
+                        )}
+                        {groupPos.isLast && <div className="flex-1" />}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-gray-300 font-mono">{record.courseId || "N/A"}</td>
+                  <td className="px-3 py-2 text-gray-300 max-w-md" title={record.courseName}>
+                    <div className="truncate">{record.courseName}</div>
+                    {record.matchType === "group" && record.matchedCourseName && (
+                      <div className="text-xs text-purple-400 mt-1">
+                        Matched: {record.matchedCourseId}
+                      </div>
+                    )}
+                    {record.matchType === "tcode" && record.matchedCourseId && (
+                      <div className="text-xs text-cyan-400 mt-1">
+                        T-Code: {record.tCode} → ID {record.matchedCourseId}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {record.matchType === "exact" ? (
+                      <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">Exact</span>
+                    ) : record.matchType === "group" ? (
+                      <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs" title={`Group: ${record.groupCode}`}>
+                        Group
+                      </span>
+                    ) : (
+                      <span className="bg-cyan-600 text-white px-2 py-0.5 rounded text-xs" title={record.reason}>
+                        T-Code
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-gray-400">{record.csvStatus}</td>
+                  <td className="px-3 py-2 text-gray-400">{record.csvExpiration || "-"}</td>
+                  <td className="px-3 py-2 text-gray-400">{record.dbExpiration || "-"}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
