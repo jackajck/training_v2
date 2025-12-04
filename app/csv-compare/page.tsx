@@ -15,7 +15,7 @@ interface MatchRecord {
   matchedCourseName?: string;
   inGroup?: boolean;
   reason?: string;
-  matchType?: "exact" | "group";
+  matchType?: "exact" | "group" | "tcode";
   mergedToId?: string;
 }
 
@@ -36,6 +36,7 @@ interface CompareResult {
     dbRecords: number;
     exactMatches: number;
     groupMatches: number;
+    tCodeMatches: number;
     notFound: number;
     courseNotInDb: number;
     mergedCourses: number;
@@ -47,6 +48,7 @@ interface CompareResult {
   records?: {
     exactMatches: MatchRecord[];
     groupMatches: MatchRecord[];
+    tCodeMatches: MatchRecord[];
     notFound: MatchRecord[];
     courseNotInDb: MatchRecord[];
     mergedCourses: MatchRecord[];
@@ -93,7 +95,8 @@ export default function CSVComparePage() {
     if (!result?.records) return [];
     const exact = result.records.exactMatches.map(r => ({ ...r, matchType: "exact" as const }));
     const group = result.records.groupMatches.map(r => ({ ...r, matchType: "group" as const }));
-    return [...exact, ...group].sort((a, b) => a.courseName.localeCompare(b.courseName));
+    const tcode = (result.records.tCodeMatches || []).map(r => ({ ...r, matchType: "tcode" as const }));
+    return [...exact, ...group, ...tcode].sort((a, b) => a.courseName.localeCompare(b.courseName));
   }, [result]);
 
   // Not found = course exists in our DB but employee doesn't have training record
@@ -244,13 +247,22 @@ export default function CSVComparePage() {
                       Matched: {record.matchedCourseId}
                     </div>
                   )}
+                  {record.matchType === "tcode" && record.matchedCourseId && (
+                    <div className="text-xs text-cyan-400 mt-1">
+                      T-Code: {record.tCode} → ID {record.matchedCourseId}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   {record.matchType === "exact" ? (
                     <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">Exact</span>
-                  ) : (
+                  ) : record.matchType === "group" ? (
                     <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-xs" title={`Group: ${record.groupCode}`}>
                       Group
+                    </span>
+                  ) : (
+                    <span className="bg-cyan-600 text-white px-2 py-0.5 rounded text-xs" title={record.reason}>
+                      T-Code
                     </span>
                   )}
                 </td>

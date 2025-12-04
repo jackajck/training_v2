@@ -128,12 +128,18 @@ export async function GET(request: NextRequest) {
       requiredCourses.add(row.course_id);
     }
 
-    // Load courses table
-    const courses = await sql`SELECT course_id FROM courses`;
+    // Load courses table with T-codes
+    const courses = await sql`SELECT course_id, course_name FROM courses`;
     const courseSet = new Set<string>();
+    const tCodeToCourse = new Map<string, { courseId: string; courseName: string }>();
     for (const c of courses) {
-      const row = c as { course_id: string };
+      const row = c as { course_id: string; course_name: string };
       courseSet.add(row.course_id);
+      // Build T-code lookup
+      const tCode = extractTCode(row.course_name);
+      if (tCode) {
+        tCodeToCourse.set(tCode, { courseId: row.course_id, courseName: row.course_name });
+      }
     }
 
     // Load merged courses lookup table
@@ -163,6 +169,7 @@ export async function GET(request: NextRequest) {
 
     const exactMatches: MatchRecord[] = [];
     const groupMatches: MatchRecord[] = [];
+    const tCodeMatches: MatchRecord[] = [];
     const notFound: MatchRecord[] = [];
     const courseNotInDb: MatchRecord[] = [];
     const mergedCourseRecords: MatchRecord[] = [];
@@ -185,7 +192,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (!courseSet.has(r.course_id)) {
-        // Check if this course was merged into another
+        // Check if this course was merged into another (explicit merged_courses table)
         const mergedInfo = mergedMap.get(r.course_id);
         if (mergedInfo) {
           mergedCourseRecords.push({
@@ -200,6 +207,24 @@ export async function GET(request: NextRequest) {
           });
           continue;
         }
+
+        // Check if T-code exists in our database (course was condensed)
+        if (tCode && tCodeToCourse.has(tCode)) {
+          const matchedCourse = tCodeToCourse.get(tCode)!;
+          tCodeMatches.push({
+            courseId: r.course_id,
+            courseName: r.requirement,
+            tCode,
+            csvStatus: r.status,
+            csvExpiration: r.expire_date,
+            isRequired,
+            matchedCourseId: matchedCourse.courseId,
+            matchedCourseName: matchedCourse.courseName,
+            reason: `T-code ${tCode} exists as ID ${matchedCourse.courseId}`
+          });
+          continue;
+        }
+
         courseNotInDb.push({
           courseId: r.course_id,
           courseName: r.requirement,
@@ -293,10 +318,11 @@ export async function GET(request: NextRequest) {
         dbRecords: dbTraining.length,
         exactMatches: exactMatches.length,
         groupMatches: groupMatches.length,
+        tCodeMatches: tCodeMatches.length,
         notFound: notFound.length,
         courseNotInDb: courseNotInDb.length,
         mergedCourses: mergedCourseRecords.length,
-        totalMatched: exactMatches.length + groupMatches.length,
+        totalMatched: exactMatches.length + groupMatches.length + tCodeMatches.length,
         requiredMatched: totalRequired,
         requiredMissing: missingRequired,
         rogueCount
@@ -304,6 +330,7 @@ export async function GET(request: NextRequest) {
       records: {
         exactMatches,
         groupMatches,
+        tCodeMatches,
         notFound,
         courseNotInDb,
         mergedCourses: mergedCourseRecords
