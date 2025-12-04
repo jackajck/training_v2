@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
-// POST - Create new position with auto-generated 555*** ID (555000-555999)
+// POST - Create new position with auto-generated ID (555000-559999)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -15,17 +15,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get the highest existing 555*** position ID (6-digit IDs starting with 555)
+    // Get the highest existing position ID in the 555000-559999 range
     const maxIdResult = await sql`
       SELECT position_id
       FROM positions
-      WHERE position_id LIKE '555___'
-      AND LENGTH(position_id) = 6
-      ORDER BY position_id DESC
+      WHERE position_id ~ '^55[5-9][0-9]{3}$'
+      ORDER BY CAST(position_id AS INTEGER) DESC
       LIMIT 1
     `;
 
-    // Generate next ID in 555*** sequence (555000-555999)
+    // Generate next ID in 555000-559999 sequence
     let startId: number;
 
     if (maxIdResult.length === 0) {
@@ -44,10 +43,10 @@ export async function POST(request: Request) {
     while (nextId === null && attempts < maxAttempts) {
       const checkId = (startId + attempts).toString();
 
-      // Make sure we stay within 555000-555999 range
-      if (parseInt(checkId) > 555999) {
+      // Make sure we stay within 555000-559999 range
+      if (parseInt(checkId) > 559999) {
         return NextResponse.json(
-          { error: 'Position ID range exhausted (555000-555999)' },
+          { error: 'Position ID range exhausted (555000-559999)' },
           { status: 500 }
         );
       }

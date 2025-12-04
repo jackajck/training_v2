@@ -59,7 +59,7 @@ export default function NewPositionPage() {
             {/* Info Box */}
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
               <p className="text-sm text-blue-300">
-                <strong>Note:</strong> The position ID will be automatically generated in the 555000-555999 range to avoid conflicts with legacy position IDs.
+                <strong>Note:</strong> The position ID will be automatically generated in the 555000-559999 range to avoid conflicts with legacy position IDs.
               </p>
             </div>
 

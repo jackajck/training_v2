@@ -175,7 +175,7 @@ export default function Sidebar() {
     <div className="w-64 bg-gray-900 h-screen fixed left-0 top-0 flex flex-col border-r border-gray-700">
       {/* Warning Banner */}
       <div className="bg-yellow-600 text-black px-3 py-2 text-center">
-        <p className="text-xs font-bold">⚠️ Major update with TCourses- ask jb3</p>
+        <p className="text-xs font-bold">Migrated CSV over - Jb3</p>
       </div>
 
       {/* Header */}

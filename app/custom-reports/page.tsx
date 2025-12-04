@@ -16,6 +16,8 @@ interface Report {
   previewEndpoint?: string;
   previewParam?: string;
   previewParamValue?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 interface SupervisorPreviewRow {
@@ -79,7 +81,9 @@ const reports: Report[] = [
       { color: "Orange", meaning: "Not Found - course exists but employee missing record", bgClass: "bg-orange-500" },
       { color: "Red", meaning: "Course/Employee not in database", bgClass: "bg-red-500" }
     ],
-    endpoint: "/api/reports/external-training-gaps"
+    endpoint: "/api/reports/external-training-gaps",
+    disabled: true,
+    disabledReason: "All external training data has been migrated into the system (Dec 4, 2025). This report is no longer needed."
   }
 ];
 
@@ -270,15 +274,33 @@ export default function CustomReportsPage() {
           {reports.map((report) => (
             <div
               key={report.id}
-              className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-gray-600 transition-all"
+              className={`bg-gray-800 rounded-lg border p-6 transition-all ${
+                report.disabled
+                  ? 'border-gray-700 opacity-50 cursor-not-allowed'
+                  : 'border-gray-700 hover:border-gray-600'
+              }`}
             >
               {/* Report Title */}
-              <h2 className="text-xl font-semibold text-white mb-3">
-                {report.title}
-              </h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className={`text-xl font-semibold ${report.disabled ? 'text-gray-400' : 'text-white'}`}>
+                  {report.title}
+                </h2>
+                {report.disabled && (
+                  <span className="px-2 py-0.5 bg-gray-700 text-gray-400 text-xs rounded-full">
+                    Disabled
+                  </span>
+                )}
+              </div>
+
+              {/* Disabled Reason Banner */}
+              {report.disabled && report.disabledReason && (
+                <div className="mb-4 p-3 bg-gray-700/50 border border-gray-600 rounded-lg">
+                  <p className="text-sm text-gray-400">{report.disabledReason}</p>
+                </div>
+              )}
 
               {/* Description */}
-              <p className="text-gray-300 text-sm mb-4 leading-relaxed">
+              <p className={`text-sm mb-4 leading-relaxed ${report.disabled ? 'text-gray-500' : 'text-gray-300'}`}>
                 {report.description}
               </p>
 
@@ -369,8 +391,12 @@ export default function CustomReportsPage() {
                 {/* Download Button */}
                 <button
                   onClick={() => handleDownload(report)}
-                  disabled={loading === report.id}
-                  className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                  disabled={loading === report.id || report.disabled}
+                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                    report.disabled
+                      ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white'
+                  }`}
                 >
                 {loading === report.id ? (
                   <>
