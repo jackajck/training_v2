@@ -43,7 +43,8 @@ export default function CoursesPage() {
   const [editForm, setEditForm] = useState({
     course_name: '',
     duration_months: '',
-    is_active: true
+    is_active: true,
+    noExpiration: false
   });
   const [saving, setSaving] = useState(false);
 
@@ -84,7 +85,8 @@ export default function CoursesPage() {
     setEditForm({
       course_name: course.course_name,
       duration_months: course.duration_months?.toString() || '',
-      is_active: course.is_active
+      is_active: course.is_active,
+      noExpiration: !course.duration_months
     });
 
     try {
@@ -98,7 +100,8 @@ export default function CoursesPage() {
       setEditForm({
         course_name: data.course.course_name,
         duration_months: data.course.duration_months?.toString() || '',
-        is_active: data.course.is_active
+        is_active: data.course.is_active,
+        noExpiration: !data.course.duration_months
       });
     } catch (error) {
       console.error('Error fetching course details:', error);
@@ -129,7 +132,7 @@ export default function CoursesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           course_name: editForm.course_name.trim(),
-          duration_months: editForm.duration_months ? parseInt(editForm.duration_months) : null,
+          duration_months: editForm.noExpiration ? null : (editForm.duration_months ? parseInt(editForm.duration_months) : null),
           is_active: editForm.is_active
         })
       });
@@ -221,7 +224,7 @@ export default function CoursesPage() {
                     <div className="font-medium text-white text-sm">{course.course_name}</div>
                     <div className="text-xs text-gray-400">ID: {course.course_id}</div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {course.duration_months || 0}mo | {course.position_count} pos | {course.completion_count} comp
+                      {course.duration_months ? `${course.duration_months}mo` : 'No exp'} | {course.position_count} pos | {course.completion_count} comp
                     </div>
                     {!course.is_active && (
                       <span className="inline-block mt-1 px-2 py-0.5 bg-red-600 text-white text-xs rounded">Inactive</span>
@@ -294,20 +297,42 @@ export default function CoursesPage() {
                     />
                   </div>
 
-                  {/* Duration */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Duration (months)
-                    </label>
+                  {/* No Expiration Checkbox */}
+                  <div className="flex items-center gap-3">
                     <input
-                      type="number"
-                      value={editForm.duration_months}
-                      onChange={(e) => setEditForm({ ...editForm, duration_months: e.target.value })}
-                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
-                      placeholder="e.g., 12"
-                      min="0"
+                      type="checkbox"
+                      id="editNoExpiration"
+                      checked={editForm.noExpiration}
+                      onChange={(e) => {
+                        setEditForm({
+                          ...editForm,
+                          noExpiration: e.target.checked,
+                          duration_months: e.target.checked ? '' : editForm.duration_months
+                        });
+                      }}
+                      className="w-5 h-5 rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
                     />
+                    <label htmlFor="editNoExpiration" className="text-sm font-medium text-gray-300 cursor-pointer">
+                      No Expiration (one-time training)
+                    </label>
                   </div>
+
+                  {/* Duration */}
+                  {!editForm.noExpiration && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Duration (months)
+                      </label>
+                      <input
+                        type="number"
+                        value={editForm.duration_months}
+                        onChange={(e) => setEditForm({ ...editForm, duration_months: e.target.value })}
+                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-gray-500"
+                        placeholder="e.g., 12"
+                        min="1"
+                      />
+                    </div>
+                  )}
 
                   {/* Active Status Toggle */}
                   <div className="pt-4 border-t border-gray-700">

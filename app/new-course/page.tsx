@@ -5,6 +5,7 @@ import { useState } from 'react';
 export default function NewCoursePage() {
   const [courseName, setCourseName] = useState('');
   const [durationMonths, setDurationMonths] = useState('');
+  const [noExpiration, setNoExpiration] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createdCourse, setCreatedCourse] = useState<{ course_id: string; course_name: string; duration_months: number | null } | null>(null);
 
@@ -15,13 +16,14 @@ export default function NewCoursePage() {
       return;
     }
 
-    const duration = durationMonths ? parseInt(durationMonths) : null;
-    if (durationMonths && (isNaN(duration!) || duration! <= 0)) {
+    const duration = noExpiration ? null : (durationMonths ? parseInt(durationMonths) : null);
+    if (!noExpiration && durationMonths && (isNaN(duration!) || duration! <= 0)) {
       alert('Duration must be a positive number');
       return;
     }
 
-    if (!confirm(`Create new course?\n\nCourse Name: ${courseName}\nDuration: ${duration ? `${duration} months` : 'Not specified'}`)) {
+    const durationText = noExpiration ? 'No Expiration' : (duration ? `${duration} months` : 'Not specified');
+    if (!confirm(`Create new course?\n\nCourse Name: ${courseName}\nDuration: ${durationText}`)) {
       return;
     }
 
@@ -49,6 +51,7 @@ export default function NewCoursePage() {
       // Reset form
       setCourseName('');
       setDurationMonths('');
+      setNoExpiration(false);
     } catch (error) {
       console.error('Error creating course:', error);
       alert('Failed to create course');
@@ -86,23 +89,44 @@ export default function NewCoursePage() {
               />
             </div>
 
-            {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Duration (months) <span className="text-gray-500 text-xs">(optional)</span>
-              </label>
+            {/* No Expiration Checkbox */}
+            <div className="flex items-center gap-3">
               <input
-                type="number"
-                value={durationMonths}
-                onChange={(e) => setDurationMonths(e.target.value)}
-                placeholder="Enter duration in months (e.g., 12, 24)..."
-                min="1"
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-gray-500"
+                type="checkbox"
+                id="noExpiration"
+                checked={noExpiration}
+                onChange={(e) => {
+                  setNoExpiration(e.target.checked);
+                  if (e.target.checked) {
+                    setDurationMonths('');
+                  }
+                }}
+                className="w-5 h-5 rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
               />
-              <p className="text-xs text-gray-500 mt-2">
-                If specified, this determines how often employees need to renew this certification.
-              </p>
+              <label htmlFor="noExpiration" className="text-sm font-medium text-gray-300 cursor-pointer">
+                No Expiration (one-time training)
+              </label>
             </div>
+
+            {/* Duration */}
+            {!noExpiration && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Duration (months) <span className="text-gray-500 text-xs">(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  value={durationMonths}
+                  onChange={(e) => setDurationMonths(e.target.value)}
+                  placeholder="Enter duration in months (e.g., 12, 24)..."
+                  min="1"
+                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-gray-500"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  If specified, this determines how often employees need to renew this certification.
+                </p>
+              </div>
+            )}
 
             {/* Last Created Course */}
             {createdCourse && (
@@ -110,9 +134,9 @@ export default function NewCoursePage() {
                 <p className="text-sm text-green-300 font-medium mb-1">✓ Last Created Course</p>
                 <p className="text-white font-semibold">{createdCourse.course_name}</p>
                 <p className="text-sm text-gray-400">ID: {createdCourse.course_id}</p>
-                {createdCourse.duration_months && (
-                  <p className="text-sm text-gray-400">Duration: {createdCourse.duration_months} months</p>
-                )}
+                <p className="text-sm text-gray-400">
+                  Duration: {createdCourse.duration_months ? `${createdCourse.duration_months} months` : 'No Expiration'}
+                </p>
               </div>
             )}
 
