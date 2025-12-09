@@ -13,6 +13,13 @@ interface CourseInGroup {
   is_one_time: boolean | null;
   recert_months: number | null;
   notes: string | null;
+  cert_durations: { months: number; count: number }[];
+  no_expiration_count: number;
+  ext_has_exp: number;
+  ext_no_exp: number;
+  ext_min_exp: string | null;
+  ext_max_exp: string | null;
+  merged_into: string | null;
 }
 
 interface TCodeGroup {
@@ -26,6 +33,7 @@ export default function CourseCleanupPage() {
   const [loading, setLoading] = useState(true);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<Record<string, Partial<CourseInGroup>>>({});
 
   useEffect(() => {
     fetchData();
@@ -48,13 +56,44 @@ export default function CourseCleanupPage() {
     setExpandedGroup(expandedGroup === tCode ? null : tCode);
   };
 
-  const updateCourse = async (courseId: string, updates: Partial<CourseInGroup>) => {
+  // Track local changes without saving
+  const updateLocal = (courseId: string, updates: Partial<CourseInGroup>) => {
+    setPendingChanges(prev => ({
+      ...prev,
+      [courseId]: { ...prev[courseId], ...updates }
+    }));
+  };
+
+  // Save changes to server
+  const saveCourse = async (courseId: string) => {
+    const changes = pendingChanges[courseId];
+    if (!changes) return;
+
+    // Find the original course to merge with changes
+    let originalCourse: CourseInGroup | undefined;
+    for (const group of groups) {
+      originalCourse = group.courses.find(c => c.course_id === courseId);
+      if (originalCourse) break;
+    }
+    if (!originalCourse) return;
+
+    // Merge original values with pending changes
+    const fullData = {
+      course_id: courseId,
+      action: changes.action ?? originalCourse.action,
+      merge_into: changes.merge_into ?? originalCourse.merge_into,
+      rename_to: changes.rename_to ?? originalCourse.rename_to,
+      is_one_time: changes.is_one_time ?? originalCourse.is_one_time,
+      recert_months: changes.recert_months ?? originalCourse.recert_months,
+      notes: changes.notes ?? originalCourse.notes,
+    };
+
     setSaving(courseId);
     try {
       const res = await fetch('/api/course-groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ course_id: courseId, ...updates })
+        body: JSON.stringify(fullData)
       });
       if (res.ok) {
         // Update local state
@@ -62,16 +101,36 @@ export default function CourseCleanupPage() {
           ...group,
           courses: group.courses.map(course =>
             course.course_id === courseId
-              ? { ...course, ...updates }
+              ? { ...course, ...changes }
               : course
           )
         })));
+        // Clear pending changes for this course
+        setPendingChanges(prev => {
+          const next = { ...prev };
+          delete next[courseId];
+          return next;
+        });
       }
     } catch (error) {
       console.error('Error updating course:', error);
     } finally {
       setSaving(null);
     }
+  };
+
+  // Get current value (pending change or original)
+  const getValue = (course: CourseInGroup, field: keyof CourseInGroup) => {
+    const pending = pendingChanges[course.course_id];
+    if (pending && field in pending) {
+      return pending[field as keyof typeof pending];
+    }
+    return course[field];
+  };
+
+  // Check if course has unsaved changes
+  const hasChanges = (courseId: string) => {
+    return !!pendingChanges[courseId];
   };
 
   const getVariantColor = (variant: string) => {
@@ -303,6 +362,7 @@ export default function CourseCleanupPage() {
                             <th className="pb-2 w-28">Action</th>
                             <th className="pb-2 w-28">Expiration</th>
                             <th className="pb-2">Notes</th>
+                            <th className="pb-2 w-16"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -323,7 +383,15 @@ export default function CourseCleanupPage() {
                               {/* Course Name */}
                               <td className="py-3">
                                 <div className="text-gray-300">{course.requirement}</div>
-                                <div className="text-xs text-gray-500">ID: {course.course_id}</div>
+                                <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                                  <span>ID: {course.course_id}</span>
+                                  {/* Show if this course was already merged */}
+                                  {course.merged_into && (
+                                    <span className="text-purple-400">
+                                      Merged → {course.merged_into}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
 
                               {/* Employee Count */}
@@ -338,12 +406,12 @@ export default function CourseCleanupPage() {
                               {/* Action */}
                               <td className="py-3">
                                 <select
-                                  value={course.action}
-                                  onChange={(e) => updateCourse(course.course_id, {
+                                  value={getValue(course, 'action') as string}
+                                  onChange={(e) => updateLocal(course.course_id, {
                                     action: e.target.value as CourseInGroup['action']
                                   })}
                                   disabled={saving === course.course_id}
-                                  className={`w-full px-2 py-1 rounded text-sm text-white border-0 cursor-pointer ${getActionColor(course.action)}`}
+                                  className={`w-full px-2 py-1 rounded text-sm text-white border-0 cursor-pointer ${getActionColor(getValue(course, 'action') as string)}`}
                                 >
                                   <option value="pending">Pending</option>
                                   <option value="keep">Keep</option>
@@ -358,8 +426,8 @@ export default function CourseCleanupPage() {
                                   <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
                                     <input
                                       type="checkbox"
-                                      checked={course.is_one_time === true}
-                                      onChange={(e) => updateCourse(course.course_id, {
+                                      checked={getValue(course, 'is_one_time') === true}
+                                      onChange={(e) => updateLocal(course.course_id, {
                                         is_one_time: e.target.checked,
                                         recert_months: e.target.checked ? null : course.recert_months
                                       })}
@@ -368,12 +436,12 @@ export default function CourseCleanupPage() {
                                     />
                                     One-time
                                   </label>
-                                  {!course.is_one_time && (
+                                  {getValue(course, 'is_one_time') !== true && (
                                     <input
                                       type="number"
                                       placeholder="mo"
-                                      value={course.recert_months || ''}
-                                      onChange={(e) => updateCourse(course.course_id, {
+                                      value={(getValue(course, 'recert_months') as number) || ''}
+                                      onChange={(e) => updateLocal(course.course_id, {
                                         recert_months: e.target.value ? parseInt(e.target.value) : null
                                       })}
                                       disabled={saving === course.course_id}
@@ -388,11 +456,24 @@ export default function CourseCleanupPage() {
                                 <input
                                   type="text"
                                   placeholder="Add note..."
-                                  value={course.notes || ''}
-                                  onChange={(e) => updateCourse(course.course_id, { notes: e.target.value })}
+                                  value={(getValue(course, 'notes') as string) || ''}
+                                  onChange={(e) => updateLocal(course.course_id, { notes: e.target.value })}
                                   disabled={saving === course.course_id}
                                   className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-sm text-white placeholder-gray-500"
                                 />
+                              </td>
+
+                              {/* Save button */}
+                              <td className="py-3">
+                                {hasChanges(course.course_id) && (
+                                  <button
+                                    onClick={() => saveCourse(course.course_id)}
+                                    disabled={saving === course.course_id}
+                                    className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded disabled:opacity-50"
+                                  >
+                                    {saving === course.course_id ? '...' : 'Save'}
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}

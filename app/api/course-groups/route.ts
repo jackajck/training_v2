@@ -25,6 +25,16 @@ interface CourseWithCount {
   is_one_time: boolean | null;
   recert_months: number | null;
   notes: string | null;
+  // Calculated cert duration info (from employee_training)
+  cert_durations: { months: number; count: number }[];
+  no_expiration_count: number;
+  // From external_training (source CSV)
+  ext_has_exp: number;
+  ext_no_exp: number;
+  ext_min_exp: string | null;
+  ext_max_exp: string | null;
+  // If this course was merged into another
+  merged_into: string | null;
 }
 
 interface TCodeGroup {
@@ -56,6 +66,79 @@ export async function GET() {
       ORDER BY et.requirement
     `;
 
+    // Get cert durations from employee_training (completion -> expiration difference)
+    const certDurations = await sql`
+      SELECT
+        course_id,
+        ROUND(EXTRACT(EPOCH FROM (expiration_date - completion_date)) / (30.44 * 24 * 60 * 60))::int as months,
+        COUNT(*) as count
+      FROM employee_training
+      WHERE expiration_date IS NOT NULL
+        AND completion_date IS NOT NULL
+        AND expiration_date > completion_date
+      GROUP BY course_id, months
+      ORDER BY course_id, count DESC
+    `;
+
+    // Get count of trainings with no expiration (one-time courses)
+    const noExpiration = await sql`
+      SELECT
+        course_id,
+        COUNT(*) as count
+      FROM employee_training
+      WHERE expiration_date IS NULL
+      GROUP BY course_id
+    `;
+
+    // Build a map of course_id -> duration info
+    const durationMap: Record<string, { months: number; count: number }[]> = {};
+    for (const row of certDurations) {
+      if (!durationMap[row.course_id]) {
+        durationMap[row.course_id] = [];
+      }
+      durationMap[row.course_id].push({
+        months: Number(row.months),
+        count: Number(row.count)
+      });
+    }
+
+    // Map for no-expiration counts
+    const noExpMap: Record<string, number> = {};
+    for (const row of noExpiration) {
+      noExpMap[row.course_id] = Number(row.count);
+    }
+
+    // Check for merged courses (old IDs that were consolidated)
+    const mergedCourses = await sql`
+      SELECT old_course_id, new_course_id FROM merged_courses
+    `;
+    const mergedMap: Record<string, string> = {};
+    for (const row of mergedCourses) {
+      mergedMap[row.old_course_id] = row.new_course_id;
+    }
+
+    // Get expiration info from external_training (the source CSV data)
+    // Also get min/max expiration dates to show timeframe
+    const extExpInfo = await sql`
+      SELECT
+        course_id,
+        SUM(CASE WHEN expire_date = 'n/a' OR expiration_date IS NULL THEN 1 ELSE 0 END)::int as no_exp_count,
+        SUM(CASE WHEN expire_date != 'n/a' AND expiration_date IS NOT NULL THEN 1 ELSE 0 END)::int as has_exp_count,
+        MIN(expiration_date) as min_exp,
+        MAX(expiration_date) as max_exp
+      FROM external_training
+      GROUP BY course_id
+    `;
+    const extExpMap: Record<string, { noExp: number; hasExp: number; minExp: string | null; maxExp: string | null }> = {};
+    for (const row of extExpInfo) {
+      extExpMap[row.course_id] = {
+        noExp: Number(row.no_exp_count),
+        hasExp: Number(row.has_exp_count),
+        minExp: row.min_exp ? new Date(row.min_exp).toISOString().split('T')[0] : null,
+        maxExp: row.max_exp ? new Date(row.max_exp).toISOString().split('T')[0] : null
+      };
+    }
+
     // Group by T-Code
     const tCodeGroups: Record<string, TCodeGroup> = {};
 
@@ -73,6 +156,7 @@ export async function GET() {
         };
       }
 
+      const extExp = extExpMap[course.course_id] || { noExp: 0, hasExp: 0 };
       const courseData: CourseWithCount = {
         course_id: course.course_id,
         requirement: course.requirement,
@@ -83,7 +167,14 @@ export async function GET() {
         rename_to: course.rename_to,
         is_one_time: course.is_one_time,
         recert_months: course.recert_months,
-        notes: course.notes
+        notes: course.notes,
+        cert_durations: durationMap[course.course_id] || [],
+        no_expiration_count: noExpMap[course.course_id] || 0,
+        ext_has_exp: extExp.hasExp,
+        ext_no_exp: extExp.noExp,
+        ext_min_exp: extExp.minExp,
+        ext_max_exp: extExp.maxExp,
+        merged_into: mergedMap[course.course_id] || null
       };
 
       tCodeGroups[tCode].courses.push(courseData);
@@ -148,7 +239,7 @@ export async function POST(request: Request) {
     await sql`
       UPDATE course_cleanup
       SET
-        action = COALESCE(${action}, action),
+        action = ${action},
         merge_into = ${merge_into},
         rename_to = ${rename_to},
         is_one_time = ${is_one_time},
