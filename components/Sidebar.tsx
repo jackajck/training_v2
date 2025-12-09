@@ -166,9 +166,9 @@ export default function Sidebar() {
     { type: "divider" },
     { href: "/org-tree", label: "ORG Tree", icon: <OrgTreeIcon /> },
     { href: "/csv-compare", label: "CSV Compare", icon: <DatabaseIcon /> },
-    { href: "/employee-view", label: "Employee View", icon: <UserIcon />, disabled: true },
     { type: "divider" },
     { href: "/custom-reports", label: "Custom Reports", icon: <DocumentIcon /> },
+    { href: "/course-groups", label: "Course Cleanup", icon: <BookIcon /> },
   ];
 
   return (
@@ -177,6 +177,7 @@ export default function Sidebar() {
       <div className="bg-yellow-600 text-black px-3 py-2 text-center">
         <p className="text-xs font-bold">• CSV Migration 12/4</p>
         <p className="text-xs font-bold">• TCourses Condensed 12/4</p>
+        <p className="text-xs font-bold">• Course Cleanup added</p>
       </div>
 
       {/* Header */}
@@ -197,29 +198,20 @@ export default function Sidebar() {
 
             return (
               <li key={item.href}>
-                {item.disabled ? (
-                  <div
-                    className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 opacity-50 cursor-not-allowed"
-                  >
-                    {item.icon}
-                    <span className="text-sm font-medium line-through">{item.label}</span>
-                  </div>
-                ) : (
-                  <Link
-                    href={item.href!}
-                    className={`
-                      flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                      ${
-                        isActive(item.href!)
-                          ? "bg-gray-800 text-white font-semibold border-l-4 border-gray-600"
-                          : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                      }
-                    `}
-                  >
-                    {item.icon}
-                    <span className="text-sm font-medium">{item.label}</span>
-                  </Link>
-                )}
+                <Link
+                  href={item.href!}
+                  className={`
+                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                    ${
+                      isActive(item.href!)
+                        ? "bg-gray-800 text-white font-semibold border-l-4 border-gray-600"
+                        : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                    }
+                  `}
+                >
+                  {item.icon}
+                  <span className="text-sm font-medium">{item.label}</span>
+                </Link>
               </li>
             );
           })}
