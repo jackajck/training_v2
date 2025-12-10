@@ -146,7 +146,8 @@ export default function AnomaliesPage() {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    return new Date(dateStr).toLocaleString("en-US", {
+      timeZone: "America/New_York",
       year: "numeric",
       month: "short",
       day: "numeric",
