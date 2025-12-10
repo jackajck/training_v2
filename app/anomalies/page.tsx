@@ -146,7 +146,10 @@ export default function AnomaliesPage() {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString("en-US", {
+    // Database returns UTC timestamps without timezone indicator
+    // Append 'Z' to ensure proper UTC parsing, then convert to Eastern
+    const utcDate = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+    return new Date(utcDate).toLocaleString("en-US", {
       timeZone: "America/New_York",
       year: "numeric",
       month: "short",
