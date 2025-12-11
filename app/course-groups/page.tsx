@@ -219,7 +219,7 @@ export default function CourseCleanupPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
             <div>
               <p className="text-gray-300 mb-3">
-                These are courses imported from the external training CSV. Many share the same T-Code (like T171)
+                These are courses imported from the external CSV (Torrie&apos;s). Many share the same T-Code (like T171)
                 but have different variants (PARENT, IL, OL, OJT).
               </p>
               <p className="text-gray-300">

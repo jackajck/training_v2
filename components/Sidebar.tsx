@@ -169,14 +169,14 @@ export default function Sidebar() {
     { type: "divider" },
     { href: "/custom-reports", label: "Custom Reports", icon: <DocumentIcon /> },
     { href: "/course-groups", label: "Course Cleanup", icon: <BookIcon /> },
-    { href: "/anomalies", label: "Anomalies", icon: <DocumentIcon /> },
+    { href: "/worklog", label: "Worklog", icon: <DocumentIcon /> },
   ];
 
   return (
     <div className="w-64 bg-gray-900 h-screen fixed left-0 top-0 flex flex-col border-r border-gray-700">
       {/* Warning Banner */}
       <div className="bg-yellow-600 text-black px-3 py-2 text-center">
-        <p className="text-xs font-bold">• Course Cleanup • Anomalies</p>
+        <p className="text-xs font-bold">Check Worklog for bugs/timeline</p>
       </div>
 
       {/* Header */}
