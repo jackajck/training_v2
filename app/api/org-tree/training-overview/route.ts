@@ -15,6 +15,7 @@ export async function GET(request: Request) {
 
     // Get all training records for employees under this leader
     // This query gets all required courses with their completion status
+    // Includes Q course assignment info to filter out "not needed" Q courses
     const allTraining = await sql`
       WITH team_members AS (
         SELECT employee_id, employee_name, badge_id
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
         et.expiration_date,
         et.training_id,
         et.notes,
+        eqc.is_needed as q_is_needed,
         CASE
             WHEN et.training_id IS NULL THEN 'Never Completed'
             WHEN et.expiration_date IS NULL THEN 'Completed (No Expiration)'
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
           ORDER BY completion_date DESC
           LIMIT 1
       ) et ON true
+      LEFT JOIN employee_q_courses eqc ON cr.employee_id = eqc.employee_id AND cr.course_id = eqc.course_id
       ORDER BY
           CASE
               WHEN et.training_id IS NULL THEN 1
@@ -73,6 +76,18 @@ export async function GET(request: Request) {
           cr.course_name
     `;
 
+    // Helper to check if a course is a Q course
+    const isQCourse = (courseName: string) => {
+      return courseName && (courseName.includes('QOP') || courseName.includes('QCD'));
+    };
+
+    // Filter out Q courses that are marked as "not needed"
+    // Q courses default to NOT needed (is_needed must be true to count)
+    const neededTraining = (allTraining as { course_name: string; q_is_needed: boolean | null; status: string; expiration_date: string | null }[]).filter((t) => {
+      if (!isQCourse(t.course_name)) return true; // Non-Q courses always count
+      return t.q_is_needed === true; // Q courses only count if explicitly marked as needed
+    });
+
     // Filter into categories
     const now = new Date();
     const thirtyDaysFromNow = new Date();
@@ -80,17 +95,17 @@ export async function GET(request: Request) {
     const ninetyDaysFromNow = new Date();
     ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
-    const expired = allTraining.filter(t =>
+    const expired = neededTraining.filter((t) =>
       t.status === 'Expired' || t.status === 'Never Completed'
     );
 
-    const expiring30 = allTraining.filter(t => {
+    const expiring30 = neededTraining.filter((t) => {
       if (!t.expiration_date || t.status === 'Expired' || t.status === 'Never Completed') return false;
       const expDate = new Date(t.expiration_date);
       return expDate > now && expDate <= thirtyDaysFromNow;
     });
 
-    const expiring90 = allTraining.filter(t => {
+    const expiring90 = neededTraining.filter((t) => {
       if (!t.expiration_date || t.status === 'Expired' || t.status === 'Never Completed') return false;
       const expDate = new Date(t.expiration_date);
       return expDate > thirtyDaysFromNow && expDate <= ninetyDaysFromNow;
@@ -101,7 +116,7 @@ export async function GET(request: Request) {
       expired: expired,
       expiring30: expiring30,
       expiring90: expiring90,
-      total: allTraining.length
+      total: neededTraining.length
     });
 
   } catch (error) {

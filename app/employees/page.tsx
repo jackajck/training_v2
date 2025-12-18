@@ -121,6 +121,14 @@ export default function EmployeesPage() {
   const [editedRole, setEditedRole] = useState<string>('');
   const [updatingRole, setUpdatingRole] = useState(false);
 
+  // Notes editing state
+  const [editingNotesIdx, setEditingNotesIdx] = useState<number | null>(null);
+  const [editedNotes, setEditedNotes] = useState<string>('');
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  // Q course assignments state - tracks which Q courses are marked as "not needed"
+  const [qCourseAssignments, setQCourseAssignments] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     fetchEmployees();
     fetchManagers();
@@ -234,6 +242,8 @@ export default function EmployeesPage() {
     setSelectedEmployee(employee);
     setLoadingDetails(true);
     setExpandedTrainingRow(null); // Reset expanded row when changing employees
+    setEditingNotesIdx(null); // Reset notes editing state
+    setEditedNotes('');
 
     try {
       const res = await fetch(`/api/employees/${employee.badge_id}`);
@@ -260,6 +270,16 @@ export default function EmployeesPage() {
         coursesMap[result.position_id] = result.courses;
       });
       setPositionCourses(coursesMap);
+
+      // Fetch Q course assignments for this employee
+      try {
+        const qRes = await fetch(`/api/employees/q-courses?employee_id=${employee.employee_id}`);
+        const qData = await qRes.json();
+        setQCourseAssignments(qData.data || {});
+      } catch (qError) {
+        console.error('Error fetching Q course assignments:', qError);
+        setQCourseAssignments({});
+      }
     } catch (error) {
       console.error('Error fetching employee details:', error);
       setPositions([]);
@@ -488,13 +508,100 @@ export default function EmployeesPage() {
     }
   };
 
+  const handleSaveNotes = async (trainingId: number, notes: string) => {
+    setSavingNotes(true);
+    try {
+      const res = await fetch('/api/training/update-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          training_id: trainingId,
+          notes: notes.trim() || null
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to update notes');
+        return;
+      }
+
+      // Update the local state
+      setTrainingRecords(prev => prev.map(r =>
+        r.training_id === trainingId
+          ? { ...r, notes: notes.trim() || null }
+          : r
+      ));
+      setEditingNotesIdx(null);
+      setEditedNotes('');
+    } catch (error) {
+      console.error('Error updating notes:', error);
+      alert('Failed to update notes');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   const getCourseStatus = (courseId: string) => {
     const record = trainingRecords.find(r => r.required_course_id === courseId);
     if (!record) return null;
     return record.status;
   };
 
-  const getStatusColorForCourse = (status: string | null) => {
+  // Check if a course is a Q course (QOP or QCD)
+  const isQCourse = (courseName: string) => {
+    return courseName.includes('QOP') || courseName.includes('QCD');
+  };
+
+  // Check if a Q course is needed for this employee
+  // Default: if no assignment exists, assume NOT needed (they must opt-in)
+  const isQCourseNeeded = (courseId: string) => {
+    return qCourseAssignments[courseId] === true;
+  };
+
+  // Toggle Q course assignment
+  const toggleQCourse = async (courseId: string, currentlyNeeded: boolean) => {
+    if (!selectedEmployee) return;
+
+    const newIsNeeded = !currentlyNeeded;
+
+    // Optimistic update
+    setQCourseAssignments(prev => ({
+      ...prev,
+      [courseId]: newIsNeeded
+    }));
+
+    try {
+      const res = await fetch('/api/employees/q-courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: selectedEmployee.employee_id,
+          course_id: courseId,
+          is_needed: newIsNeeded
+        })
+      });
+
+      if (!res.ok) {
+        // Revert on error
+        setQCourseAssignments(prev => ({
+          ...prev,
+          [courseId]: currentlyNeeded
+        }));
+        console.error('Failed to toggle Q course');
+      }
+    } catch (error) {
+      // Revert on error
+      setQCourseAssignments(prev => ({
+        ...prev,
+        [courseId]: currentlyNeeded
+      }));
+      console.error('Error toggling Q course:', error);
+    }
+  };
+
+  const getStatusColorForCourse = (status: string | null, isNotNeeded: boolean = false) => {
+    if (isNotNeeded) return 'bg-gray-700 border-gray-500';
     if (!status) return 'bg-gray-600';
     switch (status) {
       case 'Never Completed':
@@ -594,157 +701,78 @@ export default function EmployeesPage() {
           <>
             {/* MIDDLE COLUMN - Employee Info & Positions */}
             <div className="col-span-4 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden">
-              {/* Employee Info Header */}
-              <div className="p-6 border-b border-gray-700 bg-gray-900">
-                {/* Header Row with Name and Status */}
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-white">{selectedEmployee.employee_name}</h2>
-                    <p className="text-gray-400 text-sm mt-0.5">Badge ID: {selectedEmployee.badge_id}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={async () => {
-                        const newStatus = !selectedEmployee.is_active;
-                        if (!confirm(`${newStatus ? 'Activate' : 'Deactivate'} ${selectedEmployee.employee_name}?\n\n${newStatus ? 'This will make them active in the system again.' : 'This will hide them from queries but keep their records.'}`)) {
-                          return;
-                        }
-
-                        try {
-                          const res = await fetch('/api/employees/toggle-active', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              employee_id: selectedEmployee.employee_id,
-                              is_active: newStatus
-                            })
-                          });
-
-                          const data = await res.json();
-
-                          if (!res.ok) {
-                            alert(data.error || 'Failed to toggle employee status');
-                            return;
-                          }
-
-                          alert(`Employee ${newStatus ? 'activated' : 'deactivated'} successfully!`);
-                          setSelectedEmployee({ ...selectedEmployee, is_active: newStatus });
-                          fetchEmployees(searchQuery);
-                        } catch (error) {
-                          console.error('Error toggling employee status:', error);
-                          alert('Failed to toggle employee status');
-                        }
-                      }}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        selectedEmployee.is_active ? 'bg-gray-600' : 'bg-red-600'
-                      }`}
-                      title={selectedEmployee.is_active ? 'Active - Click to deactivate' : 'Inactive - Click to activate'}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          selectedEmployee.is_active ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                    <span className={`text-xs font-semibold ${selectedEmployee.is_active ? 'text-green-400' : 'text-red-400'}`}>
-                      {selectedEmployee.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
+              {/* Employee Info Header - Compact */}
+              <div className="px-4 py-3 border-b border-gray-700 bg-gray-900">
+                {/* Row 1: Name + Status */}
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg font-bold text-white">{selectedEmployee.employee_name}</h2>
+                  <button
+                    onClick={async () => {
+                      const newStatus = !selectedEmployee.is_active;
+                      if (!confirm(`${newStatus ? 'Activate' : 'Deactivate'} ${selectedEmployee.employee_name}?`)) return;
+                      try {
+                        const res = await fetch('/api/employees/toggle-active', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ employee_id: selectedEmployee.employee_id, is_active: newStatus })
+                        });
+                        if (!res.ok) { alert('Failed to toggle status'); return; }
+                        setSelectedEmployee({ ...selectedEmployee, is_active: newStatus });
+                        fetchEmployees(searchQuery);
+                      } catch { alert('Failed to toggle status'); }
+                    }}
+                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      selectedEmployee.is_active
+                        ? 'bg-green-900/50 text-green-400 hover:bg-green-900'
+                        : 'bg-red-900/50 text-red-400 hover:bg-red-900'
+                    }`}
+                  >
+                    {selectedEmployee.is_active ? 'Active' : 'Inactive'}
+                  </button>
                 </div>
 
-                {/* Info Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Role Field */}
-                  <div className="bg-gray-800 rounded-lg p-3 col-span-2">
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Role</label>
-                    {isEditingRole ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={editedRole}
-                          onChange={(e) => setEditedRole(e.target.value)}
-                          placeholder="Enter role..."
-                          disabled={updatingRole}
-                          className="flex-1 bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') updateRole();
-                            if (e.key === 'Escape') cancelEditingRole();
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          onClick={updateRole}
-                          disabled={updatingRole}
-                          className="text-green-400 hover:text-green-300 disabled:opacity-50"
-                          title="Save"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={cancelEditingRole}
-                          disabled={updatingRole}
-                          className="text-red-400 hover:text-red-300 disabled:opacity-50"
-                          title="Cancel"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between group">
-                        <span className="text-sm text-white">{selectedEmployee.role || 'Not assigned'}</span>
-                        <button
-                          onClick={startEditingRole}
-                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-200 transition-all"
-                          title="Edit role"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                {/* Row 2: Badge | Leader */}
+                <div className="flex items-center justify-between mt-1 text-xs">
+                  <span className="text-gray-500">Badge ID: {selectedEmployee.badge_id}</span>
+                  <select
+                    value={currentLeader}
+                    onChange={(e) => updateLeader(e.target.value)}
+                    disabled={updatingLeader}
+                    className="bg-gray-800 text-gray-300 text-xs px-1.5 py-0.5 rounded border border-gray-700 focus:outline-none focus:border-gray-500 disabled:opacity-50"
+                    title="Leader"
+                  >
+                    <option value="">No Leader</option>
+                    {managers.map((manager) => (
+                      <option key={manager} value={manager}>{manager}</option>
+                    ))}
+                  </select>
+                </div>
 
-                  {/* Job Codes */}
-                  {positions.length > 0 && (() => {
-                    const uniqueJobCodes = [...new Set(positions.map(p => p.job_code).filter(Boolean))];
-                    return uniqueJobCodes.length > 0 && (
-                      <div className="bg-gray-800 rounded-lg p-3">
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                          Job Code{uniqueJobCodes.length > 1 ? 's' : ''}
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {uniqueJobCodes.map((code) => (
-                            <span key={code} className="px-2 py-1 bg-gray-700 text-white text-sm rounded">
-                              {code}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Leader Field */}
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Leader</label>
-                    <select
-                      value={currentLeader}
-                      onChange={(e) => updateLeader(e.target.value)}
-                      disabled={updatingLeader}
-                      className="w-full bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                {/* Row 3: Role/Title */}
+                <div className="mt-1.5 text-xs">
+                  {isEditingRole ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={editedRole}
+                        onChange={(e) => setEditedRole(e.target.value)}
+                        disabled={updatingRole}
+                        className="bg-gray-700 text-white text-xs px-1.5 py-0.5 rounded border border-gray-600 focus:outline-none focus:border-blue-500 flex-1"
+                        onKeyDown={(e) => { if (e.key === 'Enter') updateRole(); if (e.key === 'Escape') cancelEditingRole(); }}
+                        autoFocus
+                      />
+                      <button onClick={updateRole} disabled={updatingRole} className="text-green-400 hover:text-green-300">✓</button>
+                      <button onClick={cancelEditingRole} disabled={updatingRole} className="text-red-400 hover:text-red-300">✕</button>
+                    </div>
+                  ) : (
+                    <span
+                      onClick={startEditingRole}
+                      className="text-gray-400 hover:text-white cursor-pointer"
+                      title="Click to edit"
                     >
-                      <option value="">-- Select Leader --</option>
-                      {managers.map((manager) => (
-                        <option key={manager} value={manager}>
-                          {manager}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      {selectedEmployee.role || 'No role assigned'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -789,22 +817,35 @@ export default function EmployeesPage() {
                               <p className="text-xs text-gray-600 italic pl-4">No required courses</p>
                             ) : (
                               <div className="relative pl-6">
-                                {/* Vertical timeline line */}
-                                <div className="absolute left-2 top-0 bottom-0 w-0.5 bg-gray-700"></div>
+                                {/* Vertical timeline line - centered on dots */}
+                                <div className="absolute left-[0.625rem] top-0 bottom-0 w-0.5 bg-gray-700"></div>
 
                                 {/* Courses with timeline dots */}
                                 <div className="space-y-3">
                                   {courses.map((course) => {
                                     const status = getCourseStatus(course.course_id);
-                                    const statusColor = getStatusColorForCourse(status);
+                                    const isQ = isQCourse(course.course_name);
+                                    const qNeeded = isQ ? isQCourseNeeded(course.course_id) : true;
+                                    const isNotNeeded = isQ && !qNeeded;
+                                    const statusColor = getStatusColorForCourse(status, isNotNeeded);
 
                                     return (
                                       <div key={course.course_id} className="relative">
-                                        {/* Timeline dot */}
-                                        <div className={`absolute -left-[1.1rem] top-0.5 w-3 h-3 rounded-full border-2 border-gray-900 ${statusColor}`}></div>
+                                        {/* Timeline dot - clickable for Q courses */}
+                                        {isQ ? (
+                                          <button
+                                            onClick={() => toggleQCourse(course.course_id, qNeeded)}
+                                            className={`absolute -left-[1.1rem] top-0.5 w-3 h-3 rounded-full border-2 border-gray-900 ${statusColor} hover:ring-2 hover:ring-gray-500 transition-all cursor-pointer`}
+                                            title={qNeeded ? 'Click to mark as not needed' : 'Click to mark as needed'}
+                                          />
+                                        ) : (
+                                          <div className={`absolute -left-[1.1rem] top-0.5 w-3 h-3 rounded-full border-2 border-gray-900 ${statusColor}`}></div>
+                                        )}
 
                                         {/* Course name */}
-                                        <div className="text-xs text-gray-300">{course.course_name}</div>
+                                        <div className={`text-xs ${isNotNeeded ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                          {course.course_name}
+                                        </div>
                                       </div>
                                     );
                                   })}
@@ -869,8 +910,15 @@ export default function EmployeesPage() {
                   </div>
                 </div>
                 {(() => {
-                  const expired = trainingRecords.filter(r => r.status === 'Expired').length;
-                  const missing = trainingRecords.filter(r => r.status === 'Never Completed').length;
+                  // Filter out Q courses that are marked as "not needed"
+                  const neededRecords = trainingRecords.filter(r => {
+                    const isQ = isQCourse(r.course_name);
+                    if (!isQ) return true; // Non-Q courses always count
+                    return isQCourseNeeded(r.required_course_id); // Only count Q courses marked as needed
+                  });
+
+                  const expired = neededRecords.filter(r => r.status === 'Expired').length;
+                  const missing = neededRecords.filter(r => r.status === 'Never Completed').length;
                   const problemCount = expired + missing;
 
                   if (trainingRecords.length === 0) {
@@ -914,14 +962,32 @@ export default function EmployeesPage() {
                             record.course_name.toLowerCase().includes(query) ||
                             record.required_course_id.toLowerCase().includes(query) ||
                             record.position_name.toLowerCase().includes(query) ||
-                            record.status.toLowerCase().includes(query)
+                            record.status.toLowerCase().includes(query) ||
+                            'not needed'.includes(query)
                           );
                         })
-                        .map((record, idx) => (
+                        .map((record, idx) => {
+                          // Check if this is a Q course that's not needed
+                          const isQ = isQCourse(record.course_name);
+                          const qNotNeeded = isQ && !isQCourseNeeded(record.required_course_id);
+
+                          // Determine display status
+                          const displayStatus = qNotNeeded ? 'Not Needed' : (record.status === 'Never Completed' ? 'Missing' : record.status);
+                          const statusColorClass = qNotNeeded ? 'bg-gray-600' : getStatusColor(record.status);
+
+                          return (
                         <React.Fragment key={idx}>
                           <tr
-                            onClick={() => setExpandedTrainingRow(expandedTrainingRow === idx ? null : idx)}
-                            className="hover:bg-gray-700 transition-colors cursor-pointer"
+                            onClick={() => {
+                              const newExpandedRow = expandedTrainingRow === idx ? null : idx;
+                              setExpandedTrainingRow(newExpandedRow);
+                              // Reset notes editing when collapsing or switching rows
+                              if (newExpandedRow !== editingNotesIdx) {
+                                setEditingNotesIdx(null);
+                                setEditedNotes('');
+                              }
+                            }}
+                            className={`hover:bg-gray-700 transition-colors cursor-pointer ${qNotNeeded ? 'opacity-50' : ''}`}
                           >
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-2">
@@ -933,8 +999,8 @@ export default function EmployeesPage() {
                                 >
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
-                                <span className={`px-2 py-1 ${getStatusColor(record.status)} text-white rounded text-xs font-semibold`}>
-                                  {record.status === 'Never Completed' ? 'Missing' : record.status}
+                                <span className={`px-2 py-1 ${statusColorClass} text-white rounded text-xs font-semibold`}>
+                                  {displayStatus}
                                 </span>
                               </div>
                             </td>
@@ -1007,8 +1073,60 @@ export default function EmployeesPage() {
 
                                       {/* Notes Section */}
                                       <div className="bg-gray-800 rounded-lg p-4">
-                                        <div className="text-xs font-semibold text-gray-400 mb-2">Notes</div>
-                                        {record.notes ? (
+                                        <div className="flex justify-between items-center mb-2">
+                                          <div className="text-xs font-semibold text-gray-400">Notes</div>
+                                          {record.training_id && editingNotesIdx !== idx && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingNotesIdx(idx);
+                                                setEditedNotes(record.notes || '');
+                                              }}
+                                              className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1"
+                                            >
+                                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                              </svg>
+                                              Edit
+                                            </button>
+                                          )}
+                                        </div>
+                                        {editingNotesIdx === idx && record.training_id ? (
+                                          <div className="space-y-2">
+                                            <textarea
+                                              value={editedNotes}
+                                              onChange={(e) => setEditedNotes(e.target.value)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 resize-none"
+                                              rows={4}
+                                              placeholder="Add notes..."
+                                              disabled={savingNotes}
+                                            />
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleSaveNotes(record.training_id!, editedNotes);
+                                                }}
+                                                disabled={savingNotes}
+                                                className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors text-xs font-semibold disabled:opacity-50"
+                                              >
+                                                {savingNotes ? 'Saving...' : 'Save'}
+                                              </button>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setEditingNotesIdx(null);
+                                                  setEditedNotes('');
+                                                }}
+                                                disabled={savingNotes}
+                                                className="px-3 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors text-xs font-semibold disabled:opacity-50"
+                                              >
+                                                Cancel
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : record.notes ? (
                                           <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{record.notes}</div>
                                         ) : (
                                           <div className="text-sm text-gray-500 italic">No notes recorded</div>
@@ -1034,7 +1152,8 @@ export default function EmployeesPage() {
                             </tr>
                           )}
                         </React.Fragment>
-                      ))}
+                          );
+                        })}
                     </tbody>
                   </table>
                 )}

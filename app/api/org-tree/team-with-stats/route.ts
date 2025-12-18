@@ -41,9 +41,15 @@ export async function GET(request: Request) {
     const ninetyDaysFromNow = new Date();
     ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
+    // Helper to check if a course is a Q course
+    const isQCourse = (courseName: string) => {
+      return courseName && (courseName.includes('QOP') || courseName.includes('QCD'));
+    };
+
     const teamWithStats = await Promise.all(
       team.map(async (employee) => {
         // Get all training records for this employee
+        // Includes Q course assignment info to filter out "not needed" Q courses
         const training = await sql`
           WITH course_requirements AS (
             SELECT DISTINCT
@@ -57,8 +63,10 @@ export async function GET(request: Request) {
           SELECT
             cr.employee_id,
             cr.course_id,
+            cr.course_name,
             et.expiration_date,
             et.training_id,
+            eqc.is_needed as q_is_needed,
             CASE
                 WHEN et.training_id IS NULL THEN 'Never Completed'
                 WHEN et.expiration_date IS NULL THEN 'Completed (No Expiration)'
@@ -74,19 +82,26 @@ export async function GET(request: Request) {
               ORDER BY completion_date DESC
               LIMIT 1
           ) et ON true
+          LEFT JOIN employee_q_courses eqc ON cr.employee_id = eqc.employee_id AND cr.course_id = eqc.course_id
         `;
 
-        const expiredCount = training.filter(t =>
+        // Filter out Q courses that are marked as "not needed"
+        const neededTraining = (training as { course_name: string; q_is_needed: boolean | null; status: string; expiration_date: string | null }[]).filter((t) => {
+          if (!isQCourse(t.course_name)) return true;
+          return t.q_is_needed === true;
+        });
+
+        const expiredCount = neededTraining.filter((t) =>
           t.status === 'Expired' || t.status === 'Never Completed'
         ).length;
 
-        const expiring30Count = training.filter(t => {
+        const expiring30Count = neededTraining.filter((t) => {
           if (!t.expiration_date || t.status === 'Expired' || t.status === 'Never Completed') return false;
           const expDate = new Date(t.expiration_date);
           return expDate > now && expDate <= thirtyDaysFromNow;
         }).length;
 
-        const expiring90Count = training.filter(t => {
+        const expiring90Count = neededTraining.filter((t) => {
           if (!t.expiration_date || t.status === 'Expired' || t.status === 'Never Completed') return false;
           const expDate = new Date(t.expiration_date);
           return expDate > thirtyDaysFromNow && expDate <= ninetyDaysFromNow;
